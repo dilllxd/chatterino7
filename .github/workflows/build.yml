@@ -297,11 +297,10 @@ jobs:
           cmake `
               -G Ninja `
               -DCMAKE_CXX_COMPILER=clang-cl `
-              -DCMAKE_CXX_COMPILER_LAUNCHER="" `
               -DCMAKE_C_COMPILER=clang-cl `
-              -DCMAKE_C_COMPILER_LAUNCHER="" `
               -DCMAKE_RC_COMPILER=llvm-rc `
               -DCHATTERINO_USE_COMPILER_CACHE=OFF `
+              -DCCACHE_FOUND=OFF `
               -DCMAKE_LINKER_TYPE=LLD `
               -DCMAKE_BUILD_TYPE=RelWithDebInfo `
               -DCMAKE_TOOLCHAIN_FILE="conan_toolchain.cmake" `
