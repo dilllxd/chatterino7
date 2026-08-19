@@ -96,7 +96,8 @@ void WindowManager::showSettingsDialog(QWidget *parent,
     }
 }
 
-void WindowManager::showAccountSelectPopup(QPoint point)
+void WindowManager::showAccountSelectPopup(QPoint point,
+                                           ChannelPtr contextChannel)
 {
     static auto *w = new AccountSwitchPopup;
 
@@ -106,7 +107,23 @@ void WindowManager::showAccountSelectPopup(QPoint point)
         return;
     }
 
-    w->refresh();
+    auto provider = ProviderId::Twitch;
+    if (contextChannel)
+    {
+        switch (contextChannel->getType())
+        {
+            case Channel::Type::Kick:
+                provider = ProviderId::Kick;
+                break;
+            case Channel::Type::Itzon:
+                provider = ProviderId::Itzon;
+                break;
+            default:
+                break;
+        }
+    }
+
+    w->refresh(provider);
 
     w->moveTo(point - QPoint(30, 0), widgets::BoundsChecking::CursorPosition);
     w->show();

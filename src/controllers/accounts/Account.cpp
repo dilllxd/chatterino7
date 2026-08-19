@@ -22,6 +22,8 @@ Account::Account(ProviderId providerId)
                 return twitch;
             case ProviderId::Kick:
                 return u"Kick"_s;
+            case ProviderId::Itzon:
+                return u"itzon.tv"_s;
         }
         return QString("Unknown ProviderId");
     }();

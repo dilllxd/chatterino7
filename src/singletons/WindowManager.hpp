@@ -77,7 +77,7 @@ public:
         SettingsDialogPreference preference = SettingsDialogPreference());
 
     // Show the account selector widget at point
-    void showAccountSelectPopup(QPoint point);
+    void showAccountSelectPopup(QPoint point, ChannelPtr contextChannel = {});
 
     // Tell a channel (or all channels if channel is nullptr) to redo their
     // layout

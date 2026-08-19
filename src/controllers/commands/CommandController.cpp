@@ -52,6 +52,7 @@
 #include "util/CombinePath.hpp"
 #include "util/QStringHash.hpp"
 
+#include <QSet>
 #include <QString>
 
 #include <unordered_map>
@@ -270,6 +271,25 @@ const std::unordered_map<QString, VariableReplacer> COMMAND_VARS{
     {"input.text", NO_OP_PLACEHOLDER},
     {"element.copytext", NO_OP_PLACEHOLDER},
 };
+
+bool isItzonServerCommand(QString command)
+{
+    command = command.toLower();
+    if (command.startsWith('.'))
+    {
+        command[0] = '/';
+    }
+
+    static const QSet<QString> commands{
+        QStringLiteral("/whisper"), QStringLiteral("/w"),
+        QStringLiteral("/ban"),     QStringLiteral("/timeout"),
+        QStringLiteral("/unban"),   QStringLiteral("/pin"),
+        QStringLiteral("/unpin"),   QStringLiteral("/delete"),
+        QStringLiteral("/mod"),     QStringLiteral("/unmod"),
+        QStringLiteral("/vip"),     QStringLiteral("/unvip"),
+    };
+    return commands.contains(command);
+}
 
 }  // namespace
 
@@ -577,6 +597,13 @@ QString CommandController::execCommand(const QString &textNoEmoji,
 
     if (!dryRun)
     {
+        // itzon.tv handles these commands in its IRC server.
+        if (channel && channel->isItzonChannel() &&
+            isItzonServerCommand(commandName))
+        {
+            return text;
+        }
+
         // check if command exists
         const auto it = this->commands_.find(commandName);
         if (it != this->commands_.end())

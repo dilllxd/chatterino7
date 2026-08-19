@@ -1,8 +1,10 @@
 ![chatterinoLogo](https://user-images.githubusercontent.com/41973452/272541622-52457e89-5f16-4c83-93e7-91866c25b606.png)
-Chatterino7 [![GitHub Actions Build (Windows, Ubuntu, MacOS)](https://github.com/seventv/chatterino7/actions/workflows/build.yml/badge.svg?branch=chatterino7)](https://github.com/SevenTV/chatterino7/actions?query=workflow%3ABuild+branch%3Achatterino7) [![Chocolatey Package](https://img.shields.io/chocolatey/v/chatterino7?include_prereleases)](https://chocolatey.org/packages/chatterino7)
+Chatterino7 + itzon.tv [![GitHub Actions Build (Windows, Ubuntu, MacOS)](https://github.com/dilllxd/chatterino7/actions/workflows/build.yml/badge.svg?branch=chatterino7)](https://github.com/dilllxd/chatterino7/actions/workflows/build.yml)
 ============
 
-Chatterino7 is a fork of Chatterino 2. This fork mainly contains features that aren't accepted into Chatterino 2, most notably 7TV subscriber features.
+This is an independent fork of Chatterino7 with native itzon.tv support. It is
+not intended for submission back to SevenTV or Chatterino 2. See
+[ITZON.md](ITZON.md) for setup, OAuth, chat commands, and protocol details.
 
 ### Features of Chatterino7
 
@@ -14,6 +16,10 @@ Chatterino7 is a fork of Chatterino 2. This fork mainly contains features that a
 
 - 4x Images (7TV and FFZ)
 
+- Native multi-account itzon.tv chat with OAuth and chat bot token login
+
+- itzon.tv channel 7TV emotes, live metadata, notifications, and replies
+
 ### Screenshots
 
 ![Example of Personal Emotes](https://user-images.githubusercontent.com/27637025/227032811-837c56eb-7724-431b-b00e-b944c9289dff.png)
@@ -21,15 +27,15 @@ Chatterino7 is a fork of Chatterino 2. This fork mainly contains features that a
 
 ### Downloads
 
-**Stable builds** can be downloaded from the [releases section](https://github.com/SevenTV/chatterino7/releases/latest).
-
-To test new features, you can download the **nighly build** [here](https://github.com/SevenTV/chatterino7/releases/tag/nightly-build).
-
-Windows users can install Chatterino7 [from Chocolatey](https://chocolatey.org/packages/chatterino7).
+Builds for this fork are published in its
+[releases section](https://github.com/dilllxd/chatterino7/releases).
 
 ### Issues
 
-If you have issues such as crashes or weird behaviour regarding 7TV features, report them [in the issue-section](https://github.com/SevenTV/chatterino7/issues). If you have issues with other features, please report them [in the upstream issue-section](https://github.com/Chatterino/chatterino2/issues).
+Report issues introduced by this fork in its
+[issue tracker](https://github.com/dilllxd/chatterino7/issues). Existing
+Chatterino7 and Chatterino 2 issues should still be reported to their respective
+upstream projects.
 
 ### Discord
 

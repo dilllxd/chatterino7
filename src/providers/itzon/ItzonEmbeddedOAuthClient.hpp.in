@@ -1,0 +1,8 @@
+// SPDX-License-Identifier: MIT
+
+#pragma once
+
+// Generated at configure time. OAuth public-client IDs are identifiers, not
+// secrets, and are intentionally safe to ship in an open-source desktop app.
+inline constexpr auto ITZON_EMBEDDED_OAUTH_CLIENT_ID =
+    "@CHATTERINO_ITZON_OAUTH_CLIENT_ID@";

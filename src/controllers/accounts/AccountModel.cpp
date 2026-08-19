@@ -33,19 +33,56 @@ int AccountModel::beforeInsert(const std::shared_ptr<Account> &item,
                                std::vector<QStandardItem *> &row,
                                int proposedIndex)
 {
-    if (this->categoryCount_[item->getCategory()]++ == 0)
+    (void)row;
+    (void)proposedIndex;
+
+    const auto category = item->getCategory();
+    const bool firstInCategory = this->categoryCount_[category]++ == 0;
+    if (firstInCategory)
     {
         auto newRow = this->createRow();
 
-        setStringItem(newRow[0], item->getCategory(), false, false);
+        setStringItem(newRow[0], category, false, false);
         newRow[0]->setData(QFont("Segoe UI Light", 16), Qt::FontRole);
 
-        this->insertCustomRow(std::move(newRow), proposedIndex);
+        int index = 0;
+        for (const auto &existingRow : this->rows())
+        {
+            if (existingRow.isCustomRow &&
+                category < existingRow.items[0]->data(Qt::EditRole).toString())
+            {
+                this->insertCustomRow(std::move(newRow), index);
+                return index + 1;
+            }
+            ++index;
+        }
 
-        return proposedIndex + 1;
+        this->insertCustomRow(std::move(newRow), index);
+        return index + 1;
     }
 
-    return proposedIndex;
+    bool inCategory = false;
+    int index = 0;
+    for (const auto &existingRow : this->rows())
+    {
+        if (existingRow.isCustomRow)
+        {
+            if (inCategory)
+            {
+                return index;
+            }
+            inCategory =
+                existingRow.items[0]->data(Qt::EditRole).toString() == category;
+        }
+        else if (inCategory && existingRow.original &&
+                 item->operator<(*existingRow.original.value()))
+        {
+            return index;
+        }
+        ++index;
+    }
+
+    return index;
 }
 
 void AccountModel::afterRemoved(const std::shared_ptr<Account> &item,

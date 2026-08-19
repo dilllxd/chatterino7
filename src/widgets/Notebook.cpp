@@ -1644,8 +1644,17 @@ void SplitNotebook::addCustomButtons()
         });
 
     QObject::connect(userBtn, &Button::leftClicked, [this, userBtn] {
+        ChannelPtr contextChannel;
+        if (auto *page = this->getSelectedPage())
+        {
+            if (auto *split = page->getSelectedSplit())
+            {
+                contextChannel = split->getChannel();
+            }
+        }
         getApp()->getWindows()->showAccountSelectPopup(
-            this->mapToGlobal(userBtn->rect().bottomRight()));
+            this->mapToGlobal(userBtn->rect().bottomRight()),
+            std::move(contextChannel));
     });
 
     // updates
@@ -1710,6 +1719,9 @@ void SplitNotebook::themeChangedEvent()
 SplitContainer *SplitNotebook::addPage(bool select)
 {
     auto *container = new SplitContainer(this);
+    this->signalHolder_.managedConnect(container->selectedSplitChanged, [this] {
+        this->accountContextChanged.invoke();
+    });
     auto *tab = Notebook::addPage(container, QString(), select);
     container->setTab(tab);
     tab->setParent(this);
@@ -1749,6 +1761,7 @@ void SplitNotebook::select(QWidget *page, bool focusPage, bool recordInHistory)
     }
 
     this->Notebook::select(page, focusPage, recordInHistory);
+    this->accountContextChanged.invoke();
 }
 
 void SplitNotebook::forEachSplit(const std::function<void(Split *)> &cb)

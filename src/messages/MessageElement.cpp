@@ -785,6 +785,8 @@ void TextElement::addToContainer(MessageLayoutContainer &container,
                 case MessagePlatform::Kick:
                     emote = getKickBadge();
                     break;
+                case MessagePlatform::Itzon:
+                    break;
             }
         }
 

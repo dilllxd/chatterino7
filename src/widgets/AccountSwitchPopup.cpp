@@ -10,6 +10,7 @@
 #include "singletons/Theme.hpp"
 #include "widgets/AccountSwitchWidget.hpp"
 #include "widgets/dialogs/SettingsDialog.hpp"
+#include "widgets/helper/ItzonAccountSwitchWidget.hpp"
 #include "widgets/helper/KickAccountSwitchWidget.hpp"
 #include "widgets/helper/MicroNotebook.hpp"
 
@@ -36,14 +37,18 @@ AccountSwitchPopup::AccountSwitchPopup(QWidget *parent)
     this->setContentsMargins(0, 0, 0, 0);
 
     auto *notebook = new MicroNotebook(this);
+    this->ui_.notebook = notebook;
 
     this->ui_.accountSwitchWidget = new AccountSwitchWidget(this);
     this->ui_.accountSwitchWidget->setFocusPolicy(Qt::NoFocus);
     this->ui_.kickAccountSwitcher = new KickAccountSwitchWidget(this);
     this->ui_.kickAccountSwitcher->setFocusPolicy(Qt::NoFocus);
+    this->ui_.itzonAccountSwitcher = new ItzonAccountSwitchWidget(this);
+    this->ui_.itzonAccountSwitcher->setFocusPolicy(Qt::NoFocus);
 
     auto updateNotebook = [this, notebook] {
-        if (getApp()->getAccounts()->kick.accounts.empty())
+        if (getApp()->getAccounts()->kick.accounts.empty() &&
+            getApp()->getAccounts()->itzon.accounts.empty())
         {
             notebook->setShowHeader(false);
             notebook->select(this->ui_.accountSwitchWidget);
@@ -56,9 +61,12 @@ AccountSwitchPopup::AccountSwitchPopup(QWidget *parent)
     updateNotebook();
     this->signalHolder_.addConnection(
         getApp()->getAccounts()->kick.userListUpdated.connect(updateNotebook));
+    this->signalHolder_.addConnection(
+        getApp()->getAccounts()->itzon.userListUpdated.connect(updateNotebook));
 
     notebook->addPage(this->ui_.accountSwitchWidget, "Twitch");
     notebook->addPage(this->ui_.kickAccountSwitcher, "Kick");
+    notebook->addPage(this->ui_.itzonAccountSwitcher, "itzon.tv");
     QVBoxLayout *vbox = new QVBoxLayout(this);
     vbox->addWidget(notebook);
 
@@ -121,10 +129,24 @@ void AccountSwitchPopup::themeChangedEvent()
              color(t->window.background)));
 }
 
-void AccountSwitchPopup::refresh()
+void AccountSwitchPopup::refresh(ProviderId provider)
 {
     this->ui_.accountSwitchWidget->refresh();
     this->ui_.kickAccountSwitcher->refresh();
+    this->ui_.itzonAccountSwitcher->refresh();
+
+    switch (provider)
+    {
+        case ProviderId::Kick:
+            this->ui_.notebook->select(this->ui_.kickAccountSwitcher);
+            break;
+        case ProviderId::Itzon:
+            this->ui_.notebook->select(this->ui_.itzonAccountSwitcher);
+            break;
+        case ProviderId::Twitch:
+            this->ui_.notebook->select(this->ui_.accountSwitchWidget);
+            break;
+    }
 }
 
 void AccountSwitchPopup::paintEvent(QPaintEvent *)

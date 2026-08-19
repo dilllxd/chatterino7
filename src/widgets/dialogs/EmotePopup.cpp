@@ -19,6 +19,7 @@
 #include "providers/bttv/BttvEmotes.hpp"
 #include "providers/emoji/Emojis.hpp"
 #include "providers/ffz/FfzEmotes.hpp"
+#include "providers/itzon/ItzonChannel.hpp"
 #include "providers/kick/KickAccount.hpp"
 #include "providers/kick/KickChatServer.hpp"
 #include "providers/seventv/SeventvEmotes.hpp"
@@ -707,6 +708,7 @@ void EmotePopup::loadChannel(ChannelPtr channel)
     this->channel_ = std::move(channel);
     this->twitchChannel_ = dynamic_cast<TwitchChannel *>(this->channel_.get());
     this->kickChannel_ = dynamic_cast<KickChannel *>(this->channel_.get());
+    this->itzonChannel_ = dynamic_cast<ItzonChannel *>(this->channel_.get());
 
     this->setWindowTitle("Emotes in #" + this->channel_->getName());
 
@@ -937,6 +939,11 @@ void EmotePopup::reloadEmotes()
             addEmotes(*subChannel, *map, "7TV (Personal)");
         }
     }
+    if (this->itzonChannel_ && getSettings()->enableSevenTVChannelEmotes)
+    {
+        addEmotes(*channelChannel, *this->itzonChannel_->seventvEmotes(),
+                  "7TV");
+    }
     // global
     if (getSettings()->enableBTTVGlobalEmotes)
     {
@@ -1086,6 +1093,16 @@ void EmotePopup::filterTwitchEmotes(std::shared_ptr<Channel> searchChannel,
         }
     }
 
+    if (this->itzonChannel_)
+    {
+        auto seventvChannelEmotes = filterEmoteMap(
+            searchWord, tags, *this->itzonChannel_->seventvEmotes());
+        if (!seventvChannelEmotes.empty())
+        {
+            addEmotes(*searchChannel, seventvChannelEmotes, "7TV (Channel)");
+        }
+    }
+
     if (this->twitchChannel_ == nullptr)
     {
         return;
@@ -1140,7 +1157,8 @@ void EmotePopup::filterEmotes(const QString &searchText)
     auto [searchWord, tags] = getSearchWordAndTags(searchText);
 
     // true in special channels like /mentions
-    if (this->channel_->isTwitchOrKickChannel())
+    if (this->channel_->isTwitchOrKickChannel() ||
+        this->channel_->isItzonChannel())
     {
         this->filterTwitchEmotes(searchChannel, searchWord, tags);
     }
@@ -1228,6 +1246,15 @@ std::optional<EmotePtr> EmotePopup::findEmote(const EmoteName &name)
         }
 
         emote = this->twitchChannel_->seventvEmote(name);
+        if (emote)
+        {
+            return emote;
+        }
+    }
+
+    if (this->itzonChannel_)
+    {
+        auto emote = this->itzonChannel_->seventvEmote(name);
         if (emote)
         {
             return emote;

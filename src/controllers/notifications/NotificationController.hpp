@@ -8,6 +8,7 @@
 #include "common/SignalVector.hpp"
 #include "util/QCompareTransparent.hpp"
 
+#include <QByteArray>
 #include <QTimer>
 
 namespace chatterino {
@@ -20,6 +21,7 @@ class NotificationModel;
 
 enum class Platform : uint8_t {
     Twitch,  // 0
+    Itzon,
 };
 
 class NotificationController final
@@ -53,15 +55,25 @@ public:
     /// This doesn't check for duplicate notifications.
     void notifyTwitchChannelOffline(const QString &id) const;
 
+    void notifyItzonChannelLive(const NotificationPayload &payload) const;
+
     void playSound() const;
 
     NotificationModel *createModel(QObject *parent, Platform p);
 
 private:
     void fetchFakeChannels();
+    void fetchItzonChannels();
+    void fetchItzonChannel(const QString &channelName,
+                           const QByteArray &apiToken);
+    void fetchItzonBadge(const QString &channelName,
+                         bool preserveKnownLive = false);
     void removeFakeChannel(const QString &channelName);
     void updateFakeChannel(const QString &channelName,
                            const std::optional<HelixStream> &stream);
+    void updateItzonChannel(const QString &channelName,
+                            const QString &displayName, const QString &title,
+                            bool live);
 
     struct FakeChannel {
         QString id;
@@ -73,6 +85,7 @@ private:
     /// These channels won't be tracked in LiveController.
     /// Channels are identified by their login name (case insensitive).
     std::map<QString, FakeChannel, QCompareCaseInsensitive> fakeChannels_;
+    std::map<QString, bool, QCompareCaseInsensitive> itzonChannels_;
 
     QTimer liveStatusTimer_;
 
@@ -80,6 +93,8 @@ private:
 
     ChatterinoSetting<std::vector<QString>> twitchSetting_ = {
         "/notifications/twitch"};
+    ChatterinoSetting<std::vector<QString>> itzonSetting_ = {
+        "/notifications/itzon"};
 };
 
 }  // namespace chatterino

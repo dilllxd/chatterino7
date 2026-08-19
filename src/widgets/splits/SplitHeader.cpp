@@ -14,6 +14,7 @@
 #include "controllers/hotkeys/HotkeyCategory.hpp"
 #include "controllers/hotkeys/HotkeyController.hpp"
 #include "controllers/notifications/NotificationController.hpp"
+#include "providers/itzon/ItzonChannel.hpp"
 #include "providers/kick/KickChannel.hpp"
 #include "providers/twitch/api/Helix.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
@@ -289,6 +290,109 @@ TwitchChannel::StreamStatus toTwitchStreamStatus(
     };
 }
 
+QString formatItzonTooltip(const ItzonChannel::StreamData &data,
+                           const QString &thumbnail)
+{
+    QStringList lines;
+    if (!data.title.isEmpty())
+    {
+        lines.emplace_back(data.title.toHtmlEscaped());
+        lines.emplace_back(QString{});
+    }
+
+    if (getSettings()->thumbnailSizeStream.getValue() != 0)
+    {
+        if (thumbnail.isEmpty())
+        {
+            lines.emplace_back(QStringLiteral("Couldn't fetch thumbnail"));
+        }
+        else
+        {
+            const auto height =
+                std::min(getSettings()->thumbnailSizeStream.getValue(), 4) * 80;
+            lines.emplace_back(
+                QStringLiteral("<img height=\"%1\" "
+                               "src=\"data:image/jpg;base64, %2\">")
+                    .arg(height)
+                    .arg(thumbnail));
+        }
+    }
+    if (!data.category.isEmpty())
+    {
+        lines.emplace_back(data.category.toHtmlEscaped());
+    }
+
+    if (!data.live)
+    {
+        lines.emplace_back(QStringLiteral("Offline"));
+    }
+    else if (getApp()->getStreamerMode()->isEnabled() &&
+             getSettings()->streamerModeHideViewerCountAndDuration)
+    {
+        lines.emplace_back(QStringLiteral(
+            "<span style=\"color: #808892;\">Live &mdash; &lt;Streamer "
+            "Mode&gt;</span>"));
+    }
+    else if (data.viewers.has_value())
+    {
+        lines.emplace_back(data.uptime.isEmpty()
+                               ? QStringLiteral("Live with %1 viewers")
+                                     .arg(localizeNumbers(*data.viewers))
+                               : QStringLiteral("Live for %1 with %2 viewers")
+                                     .arg(data.uptime.toHtmlEscaped())
+                                     .arg(localizeNumbers(*data.viewers)));
+    }
+    else
+    {
+        lines.emplace_back(data.uptime.isEmpty()
+                               ? QStringLiteral("Live")
+                               : QStringLiteral("Live for %1")
+                                     .arg(data.uptime.toHtmlEscaped()));
+    }
+
+    if (data.followers.has_value())
+    {
+        lines.emplace_back(QStringLiteral("%1 followers")
+                               .arg(localizeNumbers(*data.followers)));
+    }
+    if (!data.language.isEmpty() && data.language != QStringLiteral("und"))
+    {
+        lines.emplace_back(
+            QStringLiteral("Language: %1").arg(data.language.toHtmlEscaped()));
+    }
+
+    return QStringLiteral("<p style=\"text-align: center;\">%1</p>")
+        .arg(lines.join(QStringLiteral("<br>")));
+}
+
+QString formatItzonTitle(const ItzonChannel::StreamData &data,
+                         Settings &settings)
+{
+    if (!data.live)
+    {
+        return {};
+    }
+
+    QString title = QStringLiteral(" (live)");
+    if (settings.headerUptime && !data.uptime.isEmpty())
+    {
+        title += QStringLiteral(" - ") + data.uptime;
+    }
+    if (settings.headerViewerCount && data.viewers.has_value())
+    {
+        title += QStringLiteral(" - ") + localizeNumbers(*data.viewers);
+    }
+    if (settings.headerGame && !data.category.isEmpty())
+    {
+        title += QStringLiteral(" - ") + data.category;
+    }
+    if (settings.headerStreamTitle && !data.title.isEmpty())
+    {
+        title += QStringLiteral(" - ") + data.title.simplified();
+    }
+    return title;
+}
+
 auto distance(QPoint a, QPoint b)
 {
     auto x = std::abs(a.x() - b.x());
@@ -532,8 +636,9 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
     auto selected = this->split_->getSelectedChannel();
     auto *twitchChannel = dynamic_cast<TwitchChannel *>(selected.get());
     auto *kickChannel = dynamic_cast<KickChannel *>(selected.get());
+    auto *itzonChannel = dynamic_cast<ItzonChannel *>(selected.get());
 
-    if (twitchChannel || kickChannel)
+    if (twitchChannel || kickChannel || itzonChannel)
     {
         menu->addAction(
             OPEN_IN_BROWSER,
@@ -546,12 +651,16 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
                                                   "openPlayerInBrowser"),
                             this->split_, &Split::openBrowserPlayer);
         }
-        menu->addAction(
-            OPEN_IN_STREAMLINK,
-            h->getDisplaySequence(HotkeyCategory::Split, "openInStreamlink"),
-            this->split_, &Split::openInStreamlink);
+        if (twitchChannel || kickChannel)
+        {
+            menu->addAction(OPEN_IN_STREAMLINK,
+                            h->getDisplaySequence(HotkeyCategory::Split,
+                                                  "openInStreamlink"),
+                            this->split_, &Split::openInStreamlink);
+        }
 
-        if (!getSettings()->customURIScheme.getValue().isEmpty())
+        if ((twitchChannel || kickChannel) &&
+            !getSettings()->customURIScheme.getValue().isEmpty())
         {
             menu->addAction("Open in custom player",
                             h->getDisplaySequence(HotkeyCategory::Split,
@@ -617,7 +726,7 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
             &SplitHeader::reconnect);
     }
 
-    if (twitchChannel || kickChannel)
+    if (twitchChannel || kickChannel || itzonChannel)
     {
         auto bothSeq = h->getDisplaySequence(
             HotkeyCategory::Split, "reloadEmotes", {std::vector<QString>()});
@@ -682,6 +791,40 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
         moreMenu->addAction(action);
     }
 
+    if (twitchChannel ||
+        this->split_->getSelectedChannel()->getType() == Channel::Type::Itzon)
+    {
+        auto *action = new QAction(this);
+        action->setText("Notify when live");
+        action->setCheckable(true);
+
+        auto notifySeq = h->getDisplaySequence(
+            HotkeyCategory::Split, "setChannelNotification", {{"toggle"}});
+        if (notifySeq.isEmpty())
+        {
+            notifySeq = h->getDisplaySequence(HotkeyCategory::Split,
+                                              "setChannelNotification",
+                                              {std::vector<QString>()});
+        }
+        action->setShortcut(notifySeq);
+
+        const auto platform =
+            twitchChannel ? Platform::Twitch : Platform::Itzon;
+        QObject::connect(
+            moreMenu, &QMenu::aboutToShow, this, [action, this, platform]() {
+                action->setChecked(
+                    getApp()->getNotifications()->isChannelNotified(
+                        this->split_->getSelectedChannel()->getName(),
+                        platform));
+            });
+        QObject::connect(action, &QAction::triggered, this, [this, platform]() {
+            getApp()->getNotifications()->updateChannelNotification(
+                this->split_->getSelectedChannel()->getName(), platform);
+        });
+
+        moreMenu->addAction(action);
+    }
+
     if (twitchChannel)
     {
         if (twitchChannel->hasModRights())
@@ -696,66 +839,34 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
                             h->getDisplaySequence(HotkeyCategory::Split,
                                                   "openSubscriptionPage"),
                             this->split_, &Split::openSubPage);
+    }
 
+    if (twitchChannel || itzonChannel)
+    {
+        auto *action = new QAction(this);
+        action->setText("Mute highlight sounds");
+        action->setCheckable(true);
+
+        auto notifySeq = h->getDisplaySequence(
+            HotkeyCategory::Split, "setHighlightSounds", {{"toggle"}});
+        if (notifySeq.isEmpty())
         {
-            auto *action = new QAction(this);
-            action->setText("Notify when live");
-            action->setCheckable(true);
-
-            auto notifySeq = h->getDisplaySequence(
-                HotkeyCategory::Split, "setChannelNotification", {{"toggle"}});
-            if (notifySeq.isEmpty())
-            {
-                notifySeq = h->getDisplaySequence(HotkeyCategory::Split,
-                                                  "setChannelNotification",
-                                                  {std::vector<QString>()});
-                // this makes a full std::optional<> with an empty vector inside
-            }
-            action->setShortcut(notifySeq);
-
-            QObject::connect(
-                moreMenu, &QMenu::aboutToShow, this, [action, this]() {
-                    action->setChecked(
-                        getApp()->getNotifications()->isChannelNotified(
-                            this->split_->getSelectedChannel()->getName(),
-                            Platform::Twitch));
-                });
-            QObject::connect(action, &QAction::triggered, this, [this]() {
-                getApp()->getNotifications()->updateChannelNotification(
-                    this->split_->getSelectedChannel()->getName(),
-                    Platform::Twitch);
-            });
-
-            moreMenu->addAction(action);
+            notifySeq = h->getDisplaySequence(HotkeyCategory::Split,
+                                              "setHighlightSounds",
+                                              {std::vector<QString>()});
         }
+        action->setShortcut(notifySeq);
 
-        {
-            auto *action = new QAction(this);
-            action->setText("Mute highlight sounds");
-            action->setCheckable(true);
+        QObject::connect(moreMenu, &QMenu::aboutToShow, this, [action, this]() {
+            action->setChecked(getSettings()->isMutedChannel(
+                this->split_->getSelectedChannel()->getName()));
+        });
+        QObject::connect(action, &QAction::triggered, this, [this]() {
+            getSettings()->toggleMutedChannel(
+                this->split_->getSelectedChannel()->getName());
+        });
 
-            auto notifySeq = h->getDisplaySequence(
-                HotkeyCategory::Split, "setHighlightSounds", {{"toggle"}});
-            if (notifySeq.isEmpty())
-            {
-                notifySeq = h->getDisplaySequence(HotkeyCategory::Split,
-                                                  "setHighlightSounds",
-                                                  {std::vector<QString>()});
-            }
-            action->setShortcut(notifySeq);
-
-            QObject::connect(
-                moreMenu, &QMenu::aboutToShow, this, [action, this]() {
-                    action->setChecked(getSettings()->isMutedChannel(
-                        this->split_->getSelectedChannel()->getName()));
-                });
-            QObject::connect(action, &QAction::triggered, this, [this]() {
-                getSettings()->toggleMutedChannel(
-                    this->split_->getSelectedChannel()->getName());
-            });
-
-            moreMenu->addAction(action);
-        }
+        moreMenu->addAction(action);
     }
 
     moreMenu->addSeparator();
@@ -962,6 +1073,17 @@ void SplitHeader::handleChannelChanged()
                                                      this->updateChannelText();
                                                  });
     }
+    else if (auto *itzonChannel = dynamic_cast<ItzonChannel *>(channel.get()))
+    {
+        this->channelConnections_.managedConnect(
+            itzonChannel->streamDataChanged, [this]() {
+                this->updateChannelText();
+            });
+        this->channelConnections_.managedConnect(itzonChannel->userStateChanged,
+                                                 [this]() {
+                                                     this->updateIcons();
+                                                 });
+    }
 
     if (auto *twitchChannel = dynamic_cast<TwitchChannel *>(channel.get()))
     {
@@ -1136,6 +1258,38 @@ void SplitHeader::updateChannelText()
             this->tooltipText_ = formatOfflineTooltip(twitch);
         }
     }
+    else if (auto *itzonChannel =
+                 dynamic_cast<ItzonChannel *>(selectedChannel.get()))
+    {
+        const auto &stream = itzonChannel->streamData();
+        this->isLive_ = stream.live;
+        if (stream.live && !stream.thumbnailUrl.isEmpty() &&
+            (!this->lastThumbnail_.isValid() ||
+             this->lastThumbnail_.elapsed() > THUMBNAIL_MAX_AGE_MS))
+        {
+            NetworkRequest(stream.thumbnailUrl, NetworkRequestType::Get)
+                .caller(this)
+                .followRedirects(true)
+                .onSuccess([this](const auto &result) {
+                    assert(!isAppAboutToQuit());
+
+                    if (result.status() == 200)
+                    {
+                        this->thumbnail_ =
+                            QString::fromLatin1(result.getData().toBase64());
+                    }
+                    else
+                    {
+                        this->thumbnail_.clear();
+                    }
+                    this->updateChannelText();
+                })
+                .execute();
+            this->lastThumbnail_.restart();
+        }
+        this->tooltipText_ = formatItzonTooltip(stream, this->thumbnail_);
+        title += formatItzonTitle(stream, *getSettings());
+    }
 
     if (!title.isEmpty() && !this->split_->getFilters().empty())
     {
@@ -1149,7 +1303,7 @@ void SplitHeader::updateIcons()
 {
     auto channel = this->split_->getSelectedChannel();
 
-    if (channel->isTwitchOrKickChannel())
+    if (channel->isTwitchOrKickChannel() || channel->isItzonChannel())
     {
         auto moderationMode = this->split_->getModerationMode() &&
                               !getSettings()->moderationActions.empty();
@@ -1361,6 +1515,10 @@ void SplitHeader::reloadChannelEmotes()
     else if (auto *kc = dynamic_cast<KickChannel *>(channel.get()))
     {
         kc->reloadSeventvEmotes(true);
+    }
+    else if (auto *itzon = dynamic_cast<ItzonChannel *>(channel.get()))
+    {
+        itzon->reloadSeventvEmotes(true);
     }
 }
 

@@ -6,6 +6,7 @@
 
 #include "Application.hpp"
 #include "controllers/hotkeys/HotkeyController.hpp"
+#include "providers/itzon/ItzonChatServer.hpp"
 #include "providers/kick/KickChatServer.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/Fonts.hpp"
@@ -57,6 +58,8 @@ public:
             "Twitch", QVariant::fromValue(MultiChannel::Platform::Twitch));
         this->platform->addItem(
             "Kick", QVariant::fromValue(MultiChannel::Platform::Kick));
+        this->platform->addItem(
+            "itzon.tv", QVariant::fromValue(MultiChannel::Platform::Itzon));
         layout->addWidget(this->platform);
 
         this->name->setPlaceholderText("Name");
@@ -128,6 +131,9 @@ QListWidgetItem *makeMultiChannelItem(const MultiChannel::Spec &spec)
             break;
         case MultiChannel::Platform::Kick:
             name += u"[K] ";
+            break;
+        case MultiChannel::Platform::Itzon:
+            name += u"[I] ";
             break;
     }
     name += spec.name;
@@ -314,6 +320,20 @@ SelectChannelDialog::SelectChannelDialog(QWidget *parent)
 
         ui.notebook->addPage(ui.kickPage, "Kick");
     }
+    // itzon.tv
+    {
+        ui.itzonPage = new QWidget;
+        auto *itzonLayout = new QVBoxLayout(ui.itzonPage);
+        auto *itzonLabel =
+            new QLabel("Join an itzon.tv channel by its channel name");
+        itzonLabel->setWordWrap(true);
+        itzonLayout->addWidget(itzonLabel);
+        ui.itzonName = new QLineEdit;
+        ui.itzonName->setPlaceholderText("Channel name");
+        itzonLayout->addWidget(ui.itzonName);
+        itzonLayout->addStretch(1);
+        ui.notebook->addPage(ui.itzonPage, "itzon.tv");
+    }
     // Multi
     {
         ui.multiPage = new QWidget;
@@ -457,6 +477,12 @@ void SelectChannelDialog::setSelectedChannel(
             this->ui_.notebook->select(this->ui_.kickPage);
         }
         break;
+        case Channel::Type::Itzon: {
+            this->ui_.itzonName->setText(channel->getName());
+            this->ui_.itzonName->selectAll();
+            this->ui_.notebook->select(this->ui_.itzonPage);
+        }
+        break;
         case Channel::Type::Multi: {
             const auto *mc = dynamic_cast<const MultiChannel *>(channel.get());
             if (mc)
@@ -495,6 +521,12 @@ IndirectChannel SelectChannelDialog::getSelectedChannel() const
     {
         return getApp()->getKickChatServer()->getOrCreate(
             this->ui_.kickName->text().trimmed());
+    }
+
+    if (this->ui_.notebook->isSelected(this->ui_.itzonPage))
+    {
+        return getApp()->getItzonChatServer()->getOrCreate(
+            this->ui_.itzonName->text().trimmed());
     }
 
     if (this->ui_.notebook->isSelected(this->ui_.multiPage))

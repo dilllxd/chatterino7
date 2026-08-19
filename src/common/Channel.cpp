@@ -60,6 +60,10 @@ Channel::Channel(const QString &name, Type type)
     {
         this->messagePlatform_ = MessagePlatform::Kick;
     }
+    else if (this->isItzonChannel())
+    {
+        this->messagePlatform_ = MessagePlatform::Itzon;
+    }
     else
     {
         this->messagePlatform_ = MessagePlatform::AnyOrTwitch;
@@ -103,6 +107,11 @@ bool Channel::isTwitchChannel() const
 bool Channel::isKickChannel() const
 {
     return this->type_ == Type::Kick;
+}
+
+bool Channel::isItzonChannel() const
+{
+    return this->type_ == Type::Itzon;
 }
 
 bool Channel::isTwitchOrKickChannel() const

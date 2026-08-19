@@ -237,11 +237,19 @@ void SplitContainer::addSplit(Split *split)
         {
             this->tab_->newHighlightSourceAdded(split->getChannelView());
         }
+        if (this->selected_ == split)
+        {
+            this->selectedSplitChanged.invoke();
+        }
     });
 
     conns.managedConnect(split->getChannelView().liveStatusChanged, [this]() {
         this->refreshTabLiveStatus();
     });
+
+    // The channel can already be live when a saved startup layout is restored,
+    // before the liveStatusChanged connection above exists.
+    this->refreshTabLiveStatus();
 
     conns.managedConnect(split->focused, [this, split] {
         this->setSelected(split);
@@ -313,12 +321,18 @@ void SplitContainer::setSelected(Split *split)
         return;
     }
 
+    const bool selectionChanged = this->selected_ != split;
     this->selected_ = split;
 
     if (Node *node = this->baseNode_->findNodeContainingSplit(split))
     {
         this->focusSplitRecursive(node);
         this->setPreferedTargetRecursive(node);
+    }
+
+    if (selectionChanged)
+    {
+        this->selectedSplitChanged.invoke();
     }
 }
 

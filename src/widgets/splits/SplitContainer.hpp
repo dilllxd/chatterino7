@@ -184,6 +184,8 @@ private:
 public:
     SplitContainer(Notebook *parent);
 
+    pajlada::Signals::NoArgSignal selectedSplitChanged;
+
     Split *appendNewSplit(bool openChannelNameDialog);
 
     struct InsertOptions {

@@ -7,6 +7,7 @@
 #include "Application.hpp"
 #include "common/QLogging.hpp"
 #include "debug/AssertInGuiThread.hpp"
+#include "providers/itzon/ItzonChatServer.hpp"
 #include "providers/kick/KickChatServer.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "util/MultiChannel.hpp"
@@ -207,6 +208,9 @@ IndirectChannel SplitDescriptor::decodeChannel() const
                                         .userID = this->kickUserID,
                                         .channelID = this->kickChannelID,
                                     });
+        case Channel::Type::Itzon:
+            return getApp()->getItzonChatServer()->getOrCreate(
+                this->channelName_);
         case Channel::Type::Multi: {
             QVarLengthArray<MultiChannel::Spec, 4> specs;
             for (const auto &child : this->children)

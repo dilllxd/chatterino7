@@ -29,6 +29,7 @@ env:
   C2_ENABLE_LTO: ${{ github.ref == 'refs/heads/chatterino7' || startsWith(github.ref, 'refs/heads/bugfix-release') || startsWith(github.ref, 'refs/heads/release/')}}
   CHATTERINO_REQUIRE_CLEAN_GIT: On
   CHATTERINO_BUILD_TYPE: ${{ case(inputs.buildType != '', inputs.buildType, 'auto') }}
+  CHATTERINO_ITZON_API_TOKEN: ${{ secrets.CHATTERINO_ITZON_API_TOKEN }}
   CONAN_VERSION: 2.28.1
 
 jobs:

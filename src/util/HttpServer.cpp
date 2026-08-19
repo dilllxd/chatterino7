@@ -171,16 +171,15 @@ HttpServer::HttpServer(uint16_t port, QObject *parent)
     : QObject(parent)
     , handler_(defaultHandler)
 {
-    auto *tcpServer = new QTcpServer(this);
-    tcpServer->listen(QHostAddress::LocalHost, port);
+    this->server_ = new QTcpServer(this);
+    this->server_->listen(QHostAddress::LocalHost, port);
 
-    QObject::connect(tcpServer, &QTcpServer::newConnection, this,
-                     [this, tcpServer] {
-                         while (auto *conn = tcpServer->nextPendingConnection())
-                         {
-                             new Handler(this, conn);
-                         }
-                     });
+    QObject::connect(this->server_, &QTcpServer::newConnection, this, [this] {
+        while (auto *conn = this->server_->nextPendingConnection())
+        {
+            new Handler(this, conn);
+        }
+    });
 }
 
 void HttpServer::setHandler(HandlerCb handler)
@@ -195,6 +194,16 @@ void HttpServer::setHandler(HandlerCb handler)
 const HttpServer::HandlerCb &HttpServer::handler() const
 {
     return this->handler_;
+}
+
+bool HttpServer::isListening() const
+{
+    return this->server_->isListening();
+}
+
+uint16_t HttpServer::port() const
+{
+    return this->server_->serverPort();
 }
 
 }  // namespace chatterino

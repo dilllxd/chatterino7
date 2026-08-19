@@ -8,6 +8,32 @@ set(CHATTERINO_MIN_QT_VERSION 0x060403)
 option(CHATTERINO_DEBUG_NATIVE_MESSAGES "Debug native messages" OFF)
 option(CHATTERINO_STATIC_QT_BUILD "Static link Qt" OFF)
 
+# This credential is embedded in the executable and used only for the itzon.tv
+# Public API. Read it from the configure process environment so it does not
+# enter CMakeCache.txt or source control. An empty value keeps badge-only live
+# notifications working.
+set(CHATTERINO_ITZON_API_TOKEN "$ENV{CHATTERINO_ITZON_API_TOKEN}")
+configure_file(
+        providers/itzon/ItzonEmbeddedApiToken.hpp.in
+        "${CMAKE_BINARY_DIR}/autogen/ItzonEmbeddedApiToken.hpp"
+        @ONLY
+)
+
+# Public OAuth clients cannot keep a secret, so embedding the issued client ID
+# is expected and safe. Developers can override the registered client through
+# the configure environment without placing an override in CMakeCache.
+set(CHATTERINO_ITZON_OAUTH_CLIENT_ID
+        "956c2bcc5de7c1a24af49b64da1ebfc8")
+if (NOT "$ENV{CHATTERINO_ITZON_OAUTH_CLIENT_ID}" STREQUAL "")
+    set(CHATTERINO_ITZON_OAUTH_CLIENT_ID
+            "$ENV{CHATTERINO_ITZON_OAUTH_CLIENT_ID}")
+endif ()
+configure_file(
+        providers/itzon/ItzonEmbeddedOAuthClient.hpp.in
+        "${CMAKE_BINARY_DIR}/autogen/ItzonEmbeddedOAuthClient.hpp"
+        @ONLY
+)
+
 set(SOURCE_FILES
         Application.cpp
         Application.hpp
@@ -440,6 +466,20 @@ set(SOURCE_FILES
         providers/kick/KickLiveUpdates.hpp
         providers/kick/KickMessageBuilder.cpp
         providers/kick/KickMessageBuilder.hpp
+        providers/itzon/ItzonAccount.cpp
+        providers/itzon/ItzonAccount.hpp
+        providers/itzon/ItzonAccountManager.cpp
+        providers/itzon/ItzonAccountManager.hpp
+        providers/itzon/ItzonApiToken.cpp
+        providers/itzon/ItzonApiToken.hpp
+        providers/itzon/ItzonOAuth.cpp
+        providers/itzon/ItzonOAuth.hpp
+        providers/itzon/ItzonChannel.cpp
+        providers/itzon/ItzonChannel.hpp
+        providers/itzon/ItzonChatServer.cpp
+        providers/itzon/ItzonChatServer.hpp
+        providers/itzon/ItzonWebSocketProtocol.cpp
+        providers/itzon/ItzonWebSocketProtocol.hpp
 
         providers/links/LinkInfo.cpp
         providers/links/LinkInfo.hpp
@@ -772,6 +812,8 @@ set(SOURCE_FILES
 
         widgets/dialogs/KickLoginPage.cpp
         widgets/dialogs/KickLoginPage.hpp
+        widgets/dialogs/ItzonLoginPage.cpp
+        widgets/dialogs/ItzonLoginPage.hpp
         widgets/dialogs/LastRunCrashDialog.cpp
         widgets/dialogs/LastRunCrashDialog.hpp
         widgets/dialogs/LoginDialog.cpp
@@ -838,6 +880,8 @@ set(SOURCE_FILES
         widgets/helper/InvisibleSizeGrip.hpp
         widgets/helper/KickAccountSwitchWidget.cpp
         widgets/helper/KickAccountSwitchWidget.hpp
+        widgets/helper/ItzonAccountSwitchWidget.cpp
+        widgets/helper/ItzonAccountSwitchWidget.hpp
         widgets/helper/MessageView.cpp
         widgets/helper/MessageView.hpp
         widgets/helper/MicroNotebook.cpp
@@ -1201,6 +1245,13 @@ endif ()
 if (USE_PRECOMPILED_HEADERS AND NOT APPLE)
     message(STATUS "Building with precompiled headers")
     target_precompile_headers(${LIBRARY_PROJECT} PRIVATE PrecompiledHeader.hpp)
+    if (WIN32)
+        # DPAPI's SDK declarations conflict with crypto blob guards pulled in
+        # by the shared precompiled header. Compile this small storage unit
+        # with a clean Windows SDK include order.
+        set_source_files_properties(providers/itzon/ItzonAccount.cpp
+            PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+    endif()
 else ()
     message(STATUS "Building without precompiled headers")
 endif ()
@@ -1223,6 +1274,10 @@ target_compile_definitions(${VERSION_PROJECT} PRIVATE
     $<$<BOOL:${WIN32}>:USEWINSDK>
     $<$<BOOL:${BUILD_WITH_CRASHPAD}>:CHATTERINO_WITH_CRASHPAD>
 )
+
+if(WIN32)
+    target_link_libraries(${LIBRARY_PROJECT} PRIVATE Crypt32)
+endif()
 
 # source group for IDEs
 source_group(TREE ${CMAKE_SOURCE_DIR} FILES ${VERSION_SOURCE_FILES})

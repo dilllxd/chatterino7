@@ -5,6 +5,7 @@
 #pragma once
 
 #include "widgets/BaseWidget.hpp"
+#include "widgets/dialogs/ItzonLoginPage.hpp"
 #include "widgets/dialogs/KickLoginPage.hpp"
 
 #include <QAction>
@@ -84,6 +85,7 @@ private:
         AdvancedLoginWidget advanced;
 
         KickLoginPage kick;
+        ItzonLoginPage itzon;
     } ui_;
 };
 

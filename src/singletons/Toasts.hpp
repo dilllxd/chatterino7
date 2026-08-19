@@ -7,6 +7,8 @@
 #include <pajlada/settings/setting.hpp>
 #include <QString>
 
+#include <cstdint>
+
 namespace chatterino {
 
 enum class ToastReaction {
@@ -17,13 +19,19 @@ enum class ToastReaction {
     OpenInCustomPlayer = 4,
 };
 
+enum class ToastPlatform : std::uint8_t {
+    Twitch,
+    Itzon,
+};
+
 class Toasts final
 {
 public:
     ~Toasts();
 
-    void sendChannelNotification(const QString &channelName,
-                                 const QString &channelTitle);
+    void sendChannelNotification(
+        const QString &channelName, const QString &channelTitle,
+        ToastPlatform platform = ToastPlatform::Twitch);
     static QString findStringFromReaction(const ToastReaction &reaction);
     static QString findStringFromReaction(
         const pajlada::Settings::Setting<int> &reaction);
@@ -34,12 +42,14 @@ private:
 #ifdef Q_OS_WIN
     void ensureInitialized();
     void sendWindowsNotification(const QString &channelName,
-                                 const QString &channelTitle);
+                                 const QString &channelTitle,
+                                 ToastPlatform platform);
 
     bool initialized_ = false;
 #elif defined(CHATTERINO_WITH_LIBNOTIFY)
     void ensureInitialized();
-    void sendLibnotify(const QString &channelName, const QString &channelTitle);
+    void sendLibnotify(const QString &channelName, const QString &channelTitle,
+                       ToastPlatform platform);
 
     bool initialized_ = false;
 #endif

@@ -28,6 +28,7 @@
 #include "providers/emoji/Emojis.hpp"
 #include "providers/ffz/FfzBadges.hpp"
 #include "providers/ffz/FfzEmotes.hpp"
+#include "providers/itzon/ItzonChannel.hpp"
 #include "providers/links/LinkResolver.hpp"
 #include "providers/seventv/SeventvBadges.hpp"
 #include "providers/seventv/SeventvEmotes.hpp"
@@ -462,8 +463,8 @@ EmotePtr makeSharedChatBadge(const QString &sourceName,
     });
 }
 
-EmotePtr parseEmote(TwitchChannel *twitchChannel, const QString &userID,
-                    const EmoteName &name)
+EmotePtr parseEmote(TwitchChannel *twitchChannel, ItzonChannel *itzonChannel,
+                    const QString &userID, const EmoteName &name)
 {
     // Emote order:
     //  - 7TV Personal Emotes
@@ -503,6 +504,15 @@ EmotePtr parseEmote(TwitchChannel *twitchChannel, const QString &userID,
         }
 
         emote = twitchChannel->seventvEmote(name);
+        if (emote)
+        {
+            return *emote;
+        }
+    }
+
+    if (itzonChannel != nullptr)
+    {
+        emote = itzonChannel->seventvEmote(name);
         if (emote)
         {
             return *emote;
@@ -1260,13 +1270,23 @@ MessagePtr MessageBuilder::makeLiveMessage(const QString &channelName,
                                            const QString &title,
                                            MessageFlags extraFlags)
 {
+    return makeLiveMessage(channelName, channelID, title, extraFlags,
+                           {Link::UserInfo, channelName});
+}
+
+MessagePtr MessageBuilder::makeLiveMessage(const QString &channelName,
+                                           const QString &channelID,
+                                           const QString &title,
+                                           MessageFlags extraFlags,
+                                           const Link &channelLink)
+{
     MessageBuilder builder;
 
     builder.emplace<TimestampElement>();
     builder
         .emplace<TextElement>(channelName, MessageElementFlag::Username,
                               MessageColor::Text, FontStyle::ChatMediumBold)
-        ->setLink({Link::UserInfo, channelName});
+        ->setLink(channelLink);
 
     QString text;
     if (getSettings()->showTitleInLiveMessage)
@@ -1687,10 +1707,16 @@ std::pair<MessagePtrMut, HighlightAlert> MessageBuilder::makeIrcMessage(
     }
 
     auto *twitchChannel = dynamic_cast<TwitchChannel *>(channel);
+    auto *itzonChannel = dynamic_cast<ItzonChannel *>(channel);
 
     auto userID = tags.getOrEmpty("user-id");
 
     MessageBuilder builder;
+    if (channel->isItzonChannel())
+    {
+        // Highlight parsing needs the provider-specific account.
+        builder->platform = MessagePlatform::Itzon;
+    }
     builder.parseUsernameColor(tags, userID);
     builder->userID = userID;
 
@@ -1786,7 +1812,9 @@ std::pair<MessagePtrMut, HighlightAlert> MessageBuilder::makeIrcMessage(
 
     builder.appendUsername(tags, args);
 
-    TextState textState{.twitchChannel = twitchChannel, .userID = userID};
+    TextState textState{.twitchChannel = twitchChannel,
+                        .itzonChannel = itzonChannel,
+                        .userID = userID};
     if (auto optBits = tags.get("bits"))
     {
         textState.hasBits = true;
@@ -1882,12 +1910,16 @@ void MessageBuilder::addTextOrEmote(TextState &state, QString string)
     // Emote name: "forsenPuke" - if string in ignoredEmotes
     // Will match emote regardless of source (i.e. bttv, ffz)
     // Emote source + name: "bttv:nyanPls"
-    if (this->tryAppendEmote(state.twitchChannel, state.userID, {string}))
+    if (this->tryAppendEmote(state.twitchChannel, state.itzonChannel,
+                             state.userID, {string}))
     {
         // Successfully appended an emote
         return;
     }
-    this->addWordFromUserMessage(string, state.twitchChannel);
+    this->addWordFromUserMessage(
+        string, state.twitchChannel != nullptr
+                    ? static_cast<ChannelChatters *>(state.twitchChannel)
+                    : static_cast<ChannelChatters *>(state.itzonChannel));
 }
 
 void MessageBuilder::addWordFromUserMessage(QStringView string,
@@ -2068,6 +2100,10 @@ void MessageBuilder::parseMessageID(Communi::TagsRef tags)
     if (auto id = tags.get("id"))
     {
         this->message().id = *id;
+    }
+    else if (auto msgid = tags.get("msgid"))
+    {
+        this->message().id = *msgid;
     }
 }
 
@@ -2411,10 +2447,11 @@ void MessageBuilder::appendUsername(Communi::TagsRef tags,
 }
 
 Outcome MessageBuilder::tryAppendEmote(TwitchChannel *twitchChannel,
+                                       ItzonChannel *itzonChannel,
                                        const QString &userID,
                                        const EmoteName &name)
 {
-    auto emote = parseEmote(twitchChannel, userID, name);
+    auto emote = parseEmote(twitchChannel, itzonChannel, userID, name);
 
     if (!emote)
     {

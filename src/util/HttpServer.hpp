@@ -4,6 +4,8 @@
 
 #include <functional>
 
+class QTcpServer;
+
 namespace chatterino {
 
 /// A very minimal local-only HTTP server.
@@ -21,9 +23,12 @@ public:
 
     void setHandler(HandlerCb handler);
     const HandlerCb &handler() const;
+    bool isListening() const;
+    uint16_t port() const;
 
 private:
     HandlerCb handler_;
+    QTcpServer *server_ = nullptr;
 };
 
 }  // namespace chatterino

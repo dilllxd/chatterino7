@@ -12,6 +12,7 @@
 #include "controllers/spellcheck/SpellChecker.hpp"
 #include "messages/Link.hpp"
 #include "messages/Message.hpp"
+#include "providers/itzon/ItzonChannel.hpp"
 #include "providers/kick/KickChannel.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchCommon.hpp"
@@ -502,7 +503,8 @@ QString SplitInput::handleSendMessage(const std::vector<QString> &arguments)
         return "";
     }
 
-    if (!c->isTwitchOrKickChannel() || this->replyTarget_ == nullptr)
+    if ((!c->isTwitchOrKickChannel() && !c->isItzonChannel()) ||
+        this->replyTarget_ == nullptr)
     {
         // standard message send behavior
         QString message = this->ui_.textEdit->toPlainText();
@@ -520,7 +522,8 @@ QString SplitInput::handleSendMessage(const std::vector<QString> &arguments)
     // Reply to message
     auto *tc = dynamic_cast<TwitchChannel *>(c.get());
     auto *kc = dynamic_cast<KickChannel *>(c.get());
-    if (!tc && !kc)
+    auto *ic = dynamic_cast<ItzonChannel *>(c.get());
+    if (!tc && !kc && !ic)
     {
         // this should not fail
         return "";
@@ -552,6 +555,10 @@ QString SplitInput::handleSendMessage(const std::vector<QString> &arguments)
     else if (kc)
     {
         kc->sendReply(sendMessage, this->replyTarget_->id);
+    }
+    else if (ic)
+    {
+        ic->sendReply(sendMessage, this->replyTarget_->id);
     }
 
     this->postMessageSend(message, arguments);

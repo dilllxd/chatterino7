@@ -134,6 +134,35 @@ NotificationPage::NotificationPage()
                     getApp()->getNotifications()->addChannelNotification(
                         "channel", Platform::Twitch);
                 });
+
+                twitchChannels.emplace<QLabel>(
+                    "itzon.tv channels with live notifications:");
+
+                EditableModelView *itzonView =
+                    twitchChannels
+                        .emplace<EditableModelView>(
+                            getApp()->getNotifications()->createModel(
+                                nullptr, Platform::Itzon))
+                        .getElement();
+                itzonView->setTitles({"itzon.tv channels"});
+                itzonView->setValidationRegexp(twitchUserNameRegexp());
+
+                itzonView->getTableView()
+                    ->horizontalHeader()
+                    ->setSectionResizeMode(QHeaderView::Fixed);
+                itzonView->getTableView()
+                    ->horizontalHeader()
+                    ->setSectionResizeMode(0, QHeaderView::Stretch);
+
+                QTimer::singleShot(1, [itzonView] {
+                    itzonView->getTableView()->resizeColumnsToContents();
+                    itzonView->getTableView()->setColumnWidth(0, 200);
+                });
+
+                std::ignore = itzonView->addButtonPressed.connect([] {
+                    getApp()->getNotifications()->addChannelNotification(
+                        "channel", Platform::Itzon);
+                });
             }
         }
     }

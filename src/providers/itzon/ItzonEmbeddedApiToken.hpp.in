@@ -1,0 +1,7 @@
+// SPDX-License-Identifier: MIT
+
+#pragma once
+
+// Generated at configure time. Keep the credential out of source control.
+inline constexpr auto ITZON_EMBEDDED_API_TOKEN =
+    "@CHATTERINO_ITZON_API_TOKEN@";

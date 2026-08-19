@@ -59,6 +59,7 @@ public:
         /// TwitchEnd
         TwitchEnd,
         Kick,
+        Itzon,
         /// Misc
         Misc,
         Multi,
@@ -85,6 +86,7 @@ public:
     virtual const QString &getLocalizedName() const;
     bool isTwitchChannel() const;
     bool isKickChannel() const;
+    bool isItzonChannel() const;
     bool isTwitchOrKickChannel() const;
     virtual bool isEmpty() const;
 
@@ -248,6 +250,8 @@ constexpr magic_enum::customize::customize_t
             return "misc";
         case Type::Kick:
             return "kick";
+        case Type::Itzon:
+            return "itzon";
         case Type::Multi:
             return "multi";
 

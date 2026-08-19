@@ -12,6 +12,7 @@
 #include "controllers/commands/CommandController.hpp"
 #include "controllers/hotkeys/HotkeyController.hpp"
 #include "controllers/notifications/NotificationController.hpp"
+#include "providers/itzon/ItzonChannel.hpp"
 #include "providers/kick/KickAccount.hpp"
 #include "providers/kick/KickChannel.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
@@ -511,10 +512,10 @@ void Split::addShortcuts()
          }},
         {"setModerationMode",
          [this](const std::vector<QString> &arguments) -> QString {
-             if (!this->getSelectedChannel()->isTwitchOrKickChannel())
+             if (!this->getSelectedChannel()->isTwitchOrKickChannel() &&
+                 !this->getSelectedChannel()->isItzonChannel())
              {
-                 return "Cannot set moderation mode in a non-Twitch "
-                        "channel.";
+                 return "Cannot set moderation mode in this channel.";
              }
              auto mode = 2;
              // 0 is off
@@ -583,11 +584,12 @@ void Split::addShortcuts()
         {"setChannelNotification",
          [this](const std::vector<QString> &arguments) -> QString {
              auto channel = this->getSelectedChannel();
-             if (!channel->isTwitchChannel())
+             if (!channel->isTwitchChannel() && !channel->isItzonChannel())
              {
-                 return "Cannot set channel notifications for a non-Twitch "
-                        "channel.";
+                 return "Cannot set channel notifications for this channel.";
              }
+             const auto platform =
+                 channel->isItzonChannel() ? Platform::Itzon : Platform::Twitch;
              auto mode = 2;
              // 0 is off
              // 1 is on
@@ -611,15 +613,15 @@ void Split::addShortcuts()
              {
                  case 0:
                      notifications->removeChannelNotification(channelName,
-                                                              Platform::Twitch);
+                                                              platform);
                      break;
                  case 1:
                      notifications->addChannelNotification(channelName,
-                                                           Platform::Twitch);
+                                                           platform);
                      break;
                  default:
                      notifications->updateChannelNotification(channelName,
-                                                              Platform::Twitch);
+                                                              platform);
              }
              return "";
          }},
@@ -667,10 +669,10 @@ void Split::addShortcuts()
         {"setHighlightSounds",
          [this](const std::vector<QString> &arguments) -> QString {
              auto channelPtr = this->getSelectedChannel();
-             if (!channelPtr->isTwitchChannel())
+             if (!channelPtr->isTwitchChannel() &&
+                 !channelPtr->isItzonChannel())
              {
-                 return "Cannot set highlight sounds in a non-Twitch "
-                        "channel.";
+                 return "Cannot set highlight sounds in this channel.";
              }
 
              auto mode = 2;
@@ -1303,6 +1305,10 @@ void Split::openInBrowser()
     {
         QDesktopServices::openUrl("https://kick.com/" + kc->slug());
     }
+    else if (auto *itzon = dynamic_cast<ItzonChannel *>(channel.get()))
+    {
+        QDesktopServices::openUrl("https://itzon.tv/" + itzon->getName());
+    }
 }
 
 void Split::openWhispersInBrowser()
@@ -1540,6 +1546,7 @@ SplitDescriptor Split::buildDescriptor() const
     {
         case Channel::Type::Twitch:
         case Channel::Type::Misc:
+        case Channel::Type::Itzon:
             descriptor.channelName_ = chan.get()->getName();
             break;
 

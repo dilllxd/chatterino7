@@ -315,6 +315,14 @@ public:
         return nullptr;
     }
 
+    ItzonChatServer *getItzonChatServer() override
+    {
+        assert(false &&
+               "EmptyApplication::getItzonChatServer was called without "
+               "being initialized");
+        return nullptr;
+    }
+
     QTemporaryDir settingsDir;
     Args args_;
     Modes modes_{args_};

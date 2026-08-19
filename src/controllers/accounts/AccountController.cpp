@@ -6,6 +6,7 @@
 
 #include "controllers/accounts/Account.hpp"
 #include "controllers/accounts/AccountModel.hpp"
+#include "providers/itzon/ItzonAccount.hpp"
 #include "providers/kick/KickAccount.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "util/SharedPtrElementLess.hpp"
@@ -51,6 +52,22 @@ AccountController::AccountController()
             }
         });
 
+    std::ignore =
+        this->itzon.accounts.itemInserted.connect([this](const auto &args) {
+            this->accounts_.insert(args.item);
+        });
+    std::ignore =
+        this->itzon.accounts.itemRemoved.connect([this](const auto &args) {
+            if (args.caller != this)
+            {
+                this->accounts_.removeFirstMatching(
+                    [&](const auto &item) {
+                        return item == args.item;
+                    },
+                    this);
+            }
+        });
+
     std::ignore = this->accounts_.itemRemoved.connect([this](const auto &args) {
         switch (args.item->getProviderId())
         {
@@ -76,6 +93,17 @@ AccountController::AccountController()
                 }
             }
             break;
+            case ProviderId::Itzon: {
+                if (args.caller != this)
+                {
+                    this->itzon.accounts.removeFirstMatching(
+                        [&](const auto &item) {
+                            return item == args.item;
+                        },
+                        this);
+                }
+            }
+            break;
         }
     });
 }
@@ -84,6 +112,7 @@ void AccountController::load()
 {
     this->twitch.load();
     this->kick.load();
+    this->itzon.load();
 }
 
 AccountModel *AccountController::createModel(QObject *parent)

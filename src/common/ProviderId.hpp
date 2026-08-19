@@ -9,6 +9,7 @@ namespace chatterino {
 enum class ProviderId {  // NOLINT(performance-enum-size)
     Twitch,
     Kick,
+    Itzon,
 };
 //
 }  // namespace chatterino

@@ -12,6 +12,7 @@
 #include "controllers/spellcheck/SpellChecker.hpp"
 #include "messages/Emote.hpp"
 #include "providers/bttv/BttvEmotes.hpp"
+#include "providers/itzon/ItzonChannel.hpp"
 #include "providers/kick/KickChannel.hpp"
 #include "providers/kick/KickChatServer.hpp"
 #include "providers/seventv/SeventvEmotes.hpp"
@@ -26,7 +27,8 @@ namespace {
 
 using namespace chatterino;
 
-bool isEmote(TwitchChannel *twitch, KickChannel *kick, const QString &word)
+bool isEmote(TwitchChannel *twitch, KickChannel *kick, ItzonChannel *itzon,
+             const QString &word)
 {
     EmoteName name{word};
     if (twitch)
@@ -55,6 +57,10 @@ bool isEmote(TwitchChannel *twitch, KickChannel *kick, const QString &word)
             return true;
         }
     }
+    if (itzon && itzon->seventvEmote(name))
+    {
+        return true;
+    }
 
     if (getApp()->getBttvEmotes()->emote(name) ||
         getApp()->getFfzEmotes()->emote(name) ||
@@ -75,11 +81,15 @@ bool isEmote(TwitchChannel *twitch, KickChannel *kick, const QString &word)
     return false;
 }
 
-bool isChatter(TwitchChannel *twitch, KickChannel *kick, const QString &word)
+bool isChatter(TwitchChannel *twitch, KickChannel *kick, ItzonChannel *itzon,
+               const QString &word)
 {
-    ChannelChatters *cc =
-        twitch ? static_cast<ChannelChatters *>(twitch) : kick;
-    Channel *c = twitch ? static_cast<Channel *>(twitch) : kick;
+    ChannelChatters *cc = twitch ? static_cast<ChannelChatters *>(twitch)
+                          : kick ? static_cast<ChannelChatters *>(kick)
+                                 : itzon;
+    Channel *c = twitch ? static_cast<Channel *>(twitch)
+                 : kick ? static_cast<Channel *>(kick)
+                        : itzon;
     if (cc)
     {
         if (cc->accessChatters()->contains(word) ||
@@ -100,15 +110,16 @@ bool isLink(const QString &token)
 }
 
 bool isIgnoredWord(TwitchChannel *twitch, KickChannel *kick,
-                   const QString &word)
+                   ItzonChannel *itzon, const QString &word)
 {
-    return isEmote(twitch, kick, word) || isChatter(twitch, kick, word);
+    return isEmote(twitch, kick, itzon, word) ||
+           isChatter(twitch, kick, itzon, word);
 }
 
 bool isIgnoredToken(TwitchChannel *twitch, KickChannel *kick,
-                    const QString &token)
+                    ItzonChannel *itzon, const QString &token)
 {
-    return isEmote(twitch, kick, token) || isLink(token);
+    return isEmote(twitch, kick, itzon, token) || isLink(token);
 }
 
 }  // namespace
@@ -148,6 +159,8 @@ void InputHighlighter::setChannel(const std::shared_ptr<Channel> &channel)
     this->channel = twitch;
     auto kick = std::dynamic_pointer_cast<KickChannel>(channel);
     this->kickChannel = kick;
+    auto itzon = std::dynamic_pointer_cast<ItzonChannel>(channel);
+    this->itzonChannel = itzon;
     this->rehighlight();
 }
 
@@ -218,6 +231,7 @@ void InputHighlighter::visitWords(
 {
     auto *channel = this->channel.lock().get();
     auto *kick = this->kickChannel.lock().get();
+    auto *itzon = this->itzonChannel.lock().get();
 
     QStringView textView = text;
 
@@ -232,7 +246,7 @@ void InputHighlighter::visitWords(
     {
         auto tokenMatch = tokenIt.next();
         auto token = tokenMatch.captured();
-        if (isIgnoredToken(channel, kick, token))
+        if (isIgnoredToken(channel, kick, itzon, token))
         {
             continue;
         }
@@ -244,7 +258,7 @@ void InputHighlighter::visitWords(
             auto wordMatch = wordIt.next();
             auto word = wordMatch.captured();
 
-            if (!isIgnoredWord(channel, kick, word))
+            if (!isIgnoredWord(channel, kick, itzon, word))
             {
                 cb(word,
                    static_cast<int>(cmdTriggerLen + tokenMatch.capturedStart() +

@@ -3,6 +3,7 @@
 #include "Application.hpp"
 #include "common/WindowDescriptors.hpp"
 #include "messages/Message.hpp"
+#include "providers/itzon/ItzonChatServer.hpp"
 #include "providers/kick/KickChatServer.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "util/QCompareTransparent.hpp"
@@ -77,6 +78,8 @@ ChannelPtr resolveChannel(const MultiChannel::Spec &spec)
             return getApp()->getTwitch()->getOrAddChannel(spec.name);
         case MultiChannel::Platform::Kick:
             return getApp()->getKickChatServer()->getOrCreate(spec.name);
+        case MultiChannel::Platform::Itzon:
+            return getApp()->getItzonChatServer()->getOrCreate(spec.name);
     }
     return Channel::getEmpty();
 }
@@ -383,6 +386,8 @@ bool platformMatches(MessagePlatform lhs, MultiChannel::Platform rhs) noexcept
             return rhs == MultiChannel::Platform::Twitch;
         case MessagePlatform::Kick:
             return rhs == MultiChannel::Platform::Kick;
+        case MessagePlatform::Itzon:
+            return rhs == MultiChannel::Platform::Itzon;
     }
     return false;
 }

@@ -91,6 +91,7 @@ private:
         QLabel *automodLabel;
 
         QLineEdit *kickName;
+        QLineEdit *itzonName;
 
         QListWidget *multiView;
         QComboBox *multiIndicatorMode;
@@ -98,6 +99,7 @@ private:
         MicroNotebook *notebook;
         QWidget *twitchPage;
         QWidget *kickPage;
+        QWidget *itzonPage;
         QWidget *multiPage;
     } ui_{};
 

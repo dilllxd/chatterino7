@@ -12,6 +12,8 @@
 #include "common/Version.hpp"
 #include "controllers/accounts/AccountController.hpp"
 #include "controllers/hotkeys/HotkeyController.hpp"
+#include "providers/itzon/ItzonAccount.hpp"
+#include "providers/kick/KickAccount.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/Resources.hpp"
@@ -74,6 +76,18 @@ Window::Window(WindowType type, QWidget *parent)
         getApp()->getAccounts()->twitch.currentUserChanged, [this] {
             this->onAccountSelected();
         });
+    this->signalHolder_.managedConnect(
+        getApp()->getAccounts()->kick.currentUserChanged, [this] {
+            this->onAccountSelected();
+        });
+    this->signalHolder_.managedConnect(
+        getApp()->getAccounts()->itzon.currentUserChanged, [this] {
+            this->onAccountSelected();
+        });
+    this->signalHolder_.managedConnect(this->notebook_->accountContextChanged,
+                                       [this] {
+                                           this->onAccountSelected();
+                                       });
     this->onAccountSelected();
 
     if (type == WindowType::Main)
@@ -238,9 +252,18 @@ void Window::addCustomTitlebarButtons()
 
     // account
     this->userLabel_ = this->addTitleBarLabel([this] {
+        ChannelPtr contextChannel;
+        if (auto *page = this->notebook_->getSelectedPage())
+        {
+            if (auto *split = page->getSelectedSplit())
+            {
+                contextChannel = split->getChannel();
+            }
+        }
         getApp()->getWindows()->showAccountSelectPopup(
             this->userLabel_->mapToGlobal(
-                this->userLabel_->rect().bottomLeft()));
+                this->userLabel_->rect().bottomLeft()),
+            std::move(contextChannel));
     });
     this->userLabel_->setMinimumWidth(20 * this->scale());
 
@@ -378,8 +401,17 @@ void Window::addShortcuts()
              return "";
          }},
         {"openAccountSelector",  // Open account selector
-         [](const std::vector<QString> &) -> QString {
-             getApp()->getWindows()->showAccountSelectPopup({0, 0});
+         [this](const std::vector<QString> &) -> QString {
+             ChannelPtr contextChannel;
+             if (auto *page = this->notebook_->getSelectedPage())
+             {
+                 if (auto *split = page->getSelectedSplit())
+                 {
+                     contextChannel = split->getChannel();
+                 }
+             }
+             getApp()->getWindows()->showAccountSelectPopup(
+                 {0, 0}, std::move(contextChannel));
              return "";
          }},
         {"newSplit",  // Create a new split
@@ -803,19 +835,53 @@ void Window::addMenuBar()
 
 void Window::onAccountSelected()
 {
-    auto user = getApp()->getAccounts()->twitch.getCurrent();
+    QString username;
+    bool isAnonymous = true;
+
+    auto channelType = Channel::Type::None;
+    if (auto *page = this->notebook_->getSelectedPage())
+    {
+        if (auto *split = page->getSelectedSplit())
+        {
+            channelType = split->getChannel()->getType();
+        }
+    }
+
+    switch (channelType)
+    {
+        case Channel::Type::Itzon:
+            if (auto account = getApp()->getAccounts()->itzon.current())
+            {
+                username = account->username();
+                isAnonymous = username.isEmpty();
+            }
+            break;
+        case Channel::Type::Kick:
+            if (auto account = getApp()->getAccounts()->kick.current())
+            {
+                username = account->username();
+                isAnonymous = account->isAnonymous();
+            }
+            break;
+        default: {
+            auto account = getApp()->getAccounts()->twitch.getCurrent();
+            username = account->getUserName();
+            isAnonymous = account->isAnon();
+            break;
+        }
+    }
 
     // update title (also append username on Linux and MacOS)
     QString windowTitle = Version::instance().fullVersion();
 
 #if defined(Q_OS_LINUX) || defined(Q_OS_MACOS)
-    if (user->isAnon())
+    if (isAnonymous)
     {
         windowTitle += " - not logged in";
     }
     else
     {
-        windowTitle += " - " + user->getUserName();
+        windowTitle += " - " + username;
     }
 #endif
 
@@ -829,13 +895,13 @@ void Window::onAccountSelected()
     // update user
     if (this->userLabel_)
     {
-        if (user->isAnon())
+        if (isAnonymous)
         {
             this->userLabel_->setText("anonymous");
         }
         else
         {
-            this->userLabel_->setText(user->getUserName());
+            this->userLabel_->setText(username);
         }
     }
 }

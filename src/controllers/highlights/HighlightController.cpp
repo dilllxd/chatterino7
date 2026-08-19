@@ -14,6 +14,7 @@
 #include "messages/Message.hpp"
 #include "messages/MessageBuilder.hpp"
 #include "providers/colors/ColorProvider.hpp"
+#include "providers/itzon/ItzonAccount.hpp"
 #include "providers/kick/KickAccount.hpp"
 #include "providers/twitch/TwitchAccount.hpp"  // IWYU pragma: keep
 #include "providers/twitch/TwitchBadge.hpp"
@@ -519,6 +520,12 @@ std::pair<bool, HighlightResult> HighlightController::check(
             auto kickUser = getApp()->getAccounts()->kick.current();
             self =
                 !kickUser->isAnonymous() && senderName == kickUser->username();
+        }
+        break;
+        case MessagePlatform::Itzon: {
+            const auto user = getApp()->getAccounts()->itzon.current();
+            self = user && senderName.compare(user->username(),
+                                              Qt::CaseInsensitive) == 0;
         }
         break;
     }

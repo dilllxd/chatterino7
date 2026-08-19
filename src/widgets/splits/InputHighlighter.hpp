@@ -18,6 +18,7 @@ namespace chatterino {
 class Channel;
 class TwitchChannel;
 class KickChannel;
+class ItzonChannel;
 class SpellChecker;
 
 namespace inputhighlight::detail {
@@ -63,6 +64,7 @@ private:
 
     std::weak_ptr<TwitchChannel> channel;
     std::weak_ptr<KickChannel> kickChannel;
+    std::weak_ptr<ItzonChannel> itzonChannel;
 
     QRegularExpression wordRegex;
     QRegularExpression tokenRegex;

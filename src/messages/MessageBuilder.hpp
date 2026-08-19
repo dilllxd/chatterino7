@@ -24,6 +24,7 @@
 namespace chatterino {
 
 struct Message;
+struct Link;
 using MessagePtr = std::shared_ptr<const Message>;
 using MessagePtrMut = std::shared_ptr<Message>;
 
@@ -33,6 +34,7 @@ struct Emote;
 using EmotePtr = std::shared_ptr<const Emote>;
 
 class Channel;
+class ItzonChannel;
 class TwitchChannel;
 class ChannelChatters;
 class MessageThread;
@@ -190,6 +192,11 @@ public:
                                       const QString &channelID,
                                       const QString &title,
                                       MessageFlags extraFlags = {});
+    static MessagePtr makeLiveMessage(const QString &channelName,
+                                      const QString &channelID,
+                                      const QString &title,
+                                      MessageFlags extraFlags,
+                                      const Link &channelLink);
 
     // Messages in normal chat for channel stuff
     static MessagePtr makeOfflineSystemMessage(const QString &channelName,
@@ -271,6 +278,7 @@ public:
 private:
     struct TextState {
         TwitchChannel *twitchChannel = nullptr;
+        ItzonChannel *itzonChannel = nullptr;
         QString userID;  // 7TV: used for personal emotes
         bool hasBits = false;
         bool bitsStacked = false;
@@ -280,7 +288,8 @@ private:
     void addTextOrEmote(TextState &state, QString string);
 
     Outcome tryAppendCheermote(TextState &state, const QString &string);
-    Outcome tryAppendEmote(TwitchChannel *twitchChannel, const QString &userID,
+    Outcome tryAppendEmote(TwitchChannel *twitchChannel,
+                           ItzonChannel *itzonChannel, const QString &userID,
                            const EmoteName &name);
 
     bool isEmpty() const;

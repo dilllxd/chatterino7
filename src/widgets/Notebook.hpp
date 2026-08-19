@@ -259,6 +259,8 @@ class SplitNotebook : public Notebook
 public:
     SplitNotebook(Window *parent);
 
+    pajlada::Signals::NoArgSignal accountContextChanged;
+
     SplitContainer *addPage(bool select = false);
     SplitContainer *getOrAddSelectedPage();
     /// Returns `nullptr` when no page is selected.

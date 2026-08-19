@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "common/ProviderId.hpp"
 #include "widgets/BaseWindow.hpp"
 
 #include <QWidget>
@@ -12,6 +13,8 @@ namespace chatterino {
 
 class AccountSwitchWidget;
 class KickAccountSwitchWidget;
+class ItzonAccountSwitchWidget;
+class MicroNotebook;
 
 class AccountSwitchPopup : public BaseWindow
 {
@@ -20,7 +23,7 @@ class AccountSwitchPopup : public BaseWindow
 public:
     AccountSwitchPopup(QWidget *parent = nullptr);
 
-    void refresh();
+    void refresh(ProviderId provider);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -31,6 +34,8 @@ private:
     struct {
         AccountSwitchWidget *accountSwitchWidget = nullptr;
         KickAccountSwitchWidget *kickAccountSwitcher = nullptr;
+        ItzonAccountSwitchWidget *itzonAccountSwitcher = nullptr;
+        MicroNotebook *notebook = nullptr;
     } ui_;
 };
 

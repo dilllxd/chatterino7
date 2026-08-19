@@ -11,6 +11,7 @@
 #include "providers/bttv/BttvEmotes.hpp"
 #include "providers/emoji/Emojis.hpp"
 #include "providers/ffz/FfzEmotes.hpp"
+#include "providers/itzon/ItzonChannel.hpp"
 #include "providers/kick/KickAccount.hpp"
 #include "providers/kick/KickChannel.hpp"
 #include "providers/kick/KickChatServer.hpp"
@@ -152,7 +153,13 @@ void EmoteSource::initializeFromChannel(const Channel *channel)
                   "Kick Emote");
     }
 
-    if (channel->isTwitchOrKickChannel())
+    const auto *itzonChannel = dynamic_cast<const ItzonChannel *>(channel);
+    if (itzonChannel)
+    {
+        addEmotes(emotes, *itzonChannel->seventvEmotes(), "Channel 7TV");
+    }
+
+    if (channel->isTwitchOrKickChannel() || channel->isItzonChannel())
     {
         if (auto bttvG = app->getBttvEmotes()->emotes())
         {
