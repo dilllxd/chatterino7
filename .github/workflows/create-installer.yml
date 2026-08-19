@@ -126,8 +126,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [create-installer, check-release]
     permissions:
-      # FIXME: this only needed for the last step (should split to another job)
       contents: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -180,6 +181,12 @@ jobs:
         working-directory: build
         run: |
           sha256sum * > sha256-checksums.txt
+
+      - name: Attest release artifacts
+        if: ${{ needs.check-release.outputs.IS_TAGGED == '0' }}
+        uses: actions/attest@v4
+        with:
+          subject-checksums: build/sha256-checksums.txt
 
       - name: Dry Run
         if: ${{ needs.check-release.outputs.IS_TAGGED != '0' }}
