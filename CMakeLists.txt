@@ -47,7 +47,8 @@ option(CHATTERINO_SANITIZER_SUPPORT "Attempt to enable Sanitizer support on the 
 mark_as_advanced(CHATTERINO_SANITIZER_SUPPORT)
 add_feature_info("Chatterino code sanitizer support" CHATTERINO_SANITIZER_SUPPORT "")
 
-option(CHATTERINO_UPDATER "Enable update checks" ON)
+# This fork does not consume SevenTV's release feed.
+option(CHATTERINO_UPDATER "Enable update checks" OFF)
 mark_as_advanced(CHATTERINO_UPDATER)
 
 set(CHATTERINO_EXTRA_BUILD_STRING "" CACHE STRING "Provide an extra string to show in the about page under the Chatterino version. This string allows the use of Qt's HTML subset.")
@@ -70,9 +71,9 @@ if(BUILD_BENCHMARKS)
 endif()
 
 project(chatterino
-    VERSION 2.5.5
-    DESCRIPTION "Chat client for twitch.tv"
-    HOMEPAGE_URL "https://chatterino.com/"
+    VERSION 2.5.6
+    DESCRIPTION "Chat client for Twitch, Kick, and itzon.tv"
+    HOMEPAGE_URL "https://github.com/dilllxd/chatterino7"
 )
 
 if(CHATTERINO_GENERATE_COVERAGE)
