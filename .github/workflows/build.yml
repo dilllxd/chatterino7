@@ -248,18 +248,6 @@ jobs:
         with:
           arch: ${{env.C2_ARCH == 'arm' && 'arm64' || 'x64' }}
 
-      - name: Setup sccache (Windows)
-        # sccache v0.7.4
-        uses: hendrikmuhs/ccache-action@v1.2.23
-        if: startsWith(matrix.os, 'windows')
-        with:
-          variant: sccache
-          # only save on on the default (master) branch
-          save: ${{ github.event_name == 'push' }}
-          key: sccache-build-${{ matrix.os }}-${{ runner.arch }}-${{ matrix.qt-version }}-${{ matrix.skip-crashpad }}
-          restore-keys: |
-            sccache-build-${{ matrix.os }}-${{ runner.arch }}-${{ matrix.qt-version }}
-
       - name: Cache conan packages (Windows)
         if: startsWith(matrix.os, 'windows')
         uses: actions/cache@v6
@@ -309,8 +297,11 @@ jobs:
           cmake `
               -G Ninja `
               -DCMAKE_CXX_COMPILER=clang-cl `
+              -DCMAKE_CXX_COMPILER_LAUNCHER="" `
               -DCMAKE_C_COMPILER=clang-cl `
+              -DCMAKE_C_COMPILER_LAUNCHER="" `
               -DCMAKE_RC_COMPILER=llvm-rc `
+              -DCHATTERINO_USE_COMPILER_CACHE=OFF `
               -DCMAKE_LINKER_TYPE=LLD `
               -DCMAKE_BUILD_TYPE=RelWithDebInfo `
               -DCMAKE_TOOLCHAIN_FILE="conan_toolchain.cmake" `
