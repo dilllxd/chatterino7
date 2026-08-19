@@ -50,14 +50,18 @@ TEST(AccountModel, KeepsAccountsUnderTheirProviderHeader)
     AccountModel model(nullptr);
     model.initialize(&accounts);
 
-    accounts.insert(std::make_shared<TestAccount>(ProviderId::Itzon, "axel"));
-    accounts.insert(std::make_shared<TestAccount>(ProviderId::Kick, "kick"));
     accounts.insert(
-        std::make_shared<TestAccount>(ProviderId::Twitch, "dilllxd"));
-    accounts.insert(std::make_shared<TestAccount>(ProviderId::Kick, "alt"));
+        std::make_shared<TestAccount>(ProviderId::Itzon, "test-itzon"));
+    accounts.insert(
+        std::make_shared<TestAccount>(ProviderId::Kick, "test-kick-b"));
+    accounts.insert(
+        std::make_shared<TestAccount>(ProviderId::Twitch, "test-twitch"));
+    accounts.insert(
+        std::make_shared<TestAccount>(ProviderId::Kick, "test-kick-a"));
 
-    EXPECT_EQ(rows(model), QStringList({"Kick", "alt", "kick", "Twitch",
-                                        "dilllxd", "itzon.tv", "axel"}));
+    EXPECT_EQ(rows(model),
+              QStringList({"Kick", "test-kick-a", "test-kick-b", "Twitch",
+                           "test-twitch", "itzon.tv", "test-itzon"}));
 }
 
 }  // namespace
