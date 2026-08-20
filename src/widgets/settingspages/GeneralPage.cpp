@@ -1378,6 +1378,9 @@ void GeneralPage::initLayout(GeneralPageView &layout)
     SettingWidget::checkbox("Show 7TV Animated Profile Picture",
                             s.displaySevenTVAnimatedProfile)
         ->addTo(layout);
+    SettingWidget::checkbox("Show itzon.tv chat avatars",
+                            s.showItzonChatAvatars)
+        ->addTo(layout);
     SettingWidget::checkbox("Load AVIF images", s.allowAvifImages)
         ->setTooltip(
             "When enabled and an AVIF decoder is found, AVIF images will be "

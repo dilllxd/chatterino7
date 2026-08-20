@@ -20,6 +20,7 @@
 #include <QDateTime>
 #include <QJsonDocument>
 #include <QRegularExpression>
+#include <QSet>
 #include <QUrl>
 #include <QUrlQuery>
 
@@ -166,6 +167,112 @@ const QString &ItzonChannel::seventvTwitchID() const
 bool ItzonChannel::seventvEmotesReady() const
 {
     return this->seventvEmotesReady_;
+}
+
+std::pair<QString, ItzonChannel::ChatUser> ItzonChannel::parseNamesEntry(
+    QString entry)
+{
+    ChatUser user;
+    while (!entry.isEmpty())
+    {
+        switch (entry.front().unicode())
+        {
+            case '%':
+                user.staff = true;
+                break;
+            case '@':
+                user.owner = true;
+                break;
+            case '&':
+                user.bot = true;
+                break;
+            case '+':
+                user.moderator = true;
+                break;
+            case '~':
+                user.vip = true;
+                break;
+            case '*':
+                user.subscriber = true;
+                break;
+            case '=':
+                user.unverified = true;
+                break;
+            case '?':
+                user.guest = true;
+                break;
+            default:
+                return {entry, user};
+        }
+        entry.remove(0, 1);
+    }
+    return {entry, user};
+}
+
+std::optional<Url> ItzonChannel::avatarUrl(const QString &userID,
+                                           const QString &avatarExtension)
+{
+    static const QRegularExpression validUserID{QStringLiteral("^[0-9]+$")};
+    static const QRegularExpression validExtension{
+        QStringLiteral("^(?:jpg|png|gif)$")};
+    if (!validUserID.match(userID).hasMatch() ||
+        !validExtension.match(avatarExtension).hasMatch())
+    {
+        return std::nullopt;
+    }
+
+    return Url{QStringLiteral("https://itzon.tv/api/live/avatar/") + userID +
+               '.' + avatarExtension};
+}
+
+std::optional<ItzonChannel::ChatUser> ItzonChannel::chatUser(
+    const QString &name) const
+{
+    auto it = this->chatUsers_.constFind(name.toLower());
+    if (it == this->chatUsers_.cend())
+    {
+        return std::nullopt;
+    }
+    return *it;
+}
+
+void ItzonChannel::setChatUser(const QString &name, ChatUser user)
+{
+    if (!name.isEmpty())
+    {
+        this->chatUsers_.insert(name.toLower(), std::move(user));
+    }
+}
+
+void ItzonChannel::removeChatUser(const QString &name)
+{
+    this->chatUsers_.remove(name.toLower());
+}
+
+void ItzonChannel::retainChatUsers(const std::unordered_set<QString> &names)
+{
+    QSet<QString> normalizedNames;
+    normalizedNames.reserve(static_cast<qsizetype>(names.size()));
+    for (const auto &name : names)
+    {
+        normalizedNames.insert(name.toLower());
+    }
+    for (auto it = this->chatUsers_.begin(); it != this->chatUsers_.end();)
+    {
+        if (!normalizedNames.contains(it.key()))
+        {
+            it = this->chatUsers_.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
+}
+
+void ItzonChannel::clearChatUsers()
+{
+    this->chatUsers_.clear();
 }
 
 void ItzonChannel::markSeventvEmotesReady()

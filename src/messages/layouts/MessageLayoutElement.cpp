@@ -402,10 +402,14 @@ void ImageWithCircleBackgroundLayoutElement::paint(
     if (pixmap && !this->image_->animated())
     {
         QRectF boxRect(this->getRect());
+        QPainterPath clip;
+        clip.addEllipse(boxRect);
+        painter.save();
         painter.setRenderHint(QPainter::Antialiasing);
         painter.setPen(Qt::NoPen);
         painter.setBrush(QBrush(this->color_, Qt::SolidPattern));
         painter.drawEllipse(boxRect);
+        painter.setClipPath(clip, Qt::IntersectClip);
 
         QRectF imgRect;
         imgRect.setTopLeft(boxRect.topLeft());
@@ -413,7 +417,39 @@ void ImageWithCircleBackgroundLayoutElement::paint(
         imgRect.translate(this->padding_, this->padding_);
 
         painter.drawPixmap(imgRect, *pixmap, QRectF());
+        painter.restore();
     }
+}
+
+bool ImageWithCircleBackgroundLayoutElement::paintAnimated(QPainter &painter,
+                                                           qreal yOffset)
+{
+    if (this->image_ == nullptr || !this->image_->animated())
+    {
+        return false;
+    }
+    auto pixmap = this->image_->pixmapOrLoad();
+    if (!pixmap)
+    {
+        return false;
+    }
+
+    QRectF boxRect(this->getRect());
+    boxRect.moveTop(boxRect.y() + yOffset);
+    QPainterPath clip;
+    clip.addEllipse(boxRect);
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QBrush(this->color_, Qt::SolidPattern));
+    painter.drawEllipse(boxRect);
+    painter.setClipPath(clip, Qt::IntersectClip);
+
+    QRectF imgRect(boxRect.topLeft(), this->imageSize_);
+    imgRect.translate(this->padding_, this->padding_);
+    painter.drawPixmap(imgRect, *pixmap, QRectF());
+    painter.restore();
+    return true;
 }
 
 //

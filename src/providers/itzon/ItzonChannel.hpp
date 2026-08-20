@@ -7,10 +7,13 @@
 #include "common/ChannelChatters.hpp"
 
 #include <pajlada/signals/signal.hpp>
+#include <QHash>
 #include <QTimer>
 
 #include <optional>
 #include <unordered_map>
+#include <unordered_set>
+#include <utility>
 
 namespace chatterino {
 
@@ -23,6 +26,23 @@ struct EmoteName;
 class ItzonChannel : public Channel, public ChannelChatters
 {
 public:
+    struct ChatUser {
+        bool staff = false;
+        bool owner = false;
+        bool bot = false;
+        bool moderator = false;
+        bool vip = false;
+        bool subscriber = false;
+        bool unverified = false;
+        bool guest = false;
+        bool partner = false;
+        QString subscriberBadge;
+        QString userID;
+        QString avatarExtension;
+
+        bool operator==(const ChatUser &other) const = default;
+    };
+
     struct StreamData {
         bool live = false;
         QString title;
@@ -51,6 +71,14 @@ public:
     const QString &seventvTwitchID() const;
     bool seventvEmotesReady() const;
     const StreamData &streamData() const;
+    static std::pair<QString, ChatUser> parseNamesEntry(QString entry);
+    static std::optional<Url> avatarUrl(const QString &userID,
+                                        const QString &avatarExtension);
+    std::optional<ChatUser> chatUser(const QString &name) const;
+    void setChatUser(const QString &name, ChatUser user);
+    void removeChatUser(const QString &name);
+    void retainChatUsers(const std::unordered_set<QString> &names);
+    void clearChatUsers();
     std::pair<std::shared_ptr<MessageThread>, MessagePtr> getOrCreateThread(
         const QString &messageID);
 
@@ -77,6 +105,7 @@ private:
     QString seventvTwitchID_;
     QTimer seventvStartupTimer_;
     bool seventvEmotesReady_ = false;
+    QHash<QString, ChatUser> chatUsers_;
     std::unordered_map<QString, std::weak_ptr<MessageThread>> threads_;
     bool isMod_ = false;
     bool isVip_ = false;

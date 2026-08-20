@@ -472,6 +472,8 @@ set(SOURCE_FILES
         providers/itzon/ItzonAccountManager.hpp
         providers/itzon/ItzonApiToken.cpp
         providers/itzon/ItzonApiToken.hpp
+        providers/itzon/ItzonBadges.cpp
+        providers/itzon/ItzonBadges.hpp
         providers/itzon/ItzonOAuth.cpp
         providers/itzon/ItzonOAuth.hpp
         providers/itzon/ItzonChannel.cpp

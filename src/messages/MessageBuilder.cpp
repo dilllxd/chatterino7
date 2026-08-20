@@ -28,6 +28,7 @@
 #include "providers/emoji/Emojis.hpp"
 #include "providers/ffz/FfzBadges.hpp"
 #include "providers/ffz/FfzEmotes.hpp"
+#include "providers/itzon/ItzonBadges.hpp"
 #include "providers/itzon/ItzonChannel.hpp"
 #include "providers/links/LinkResolver.hpp"
 #include "providers/seventv/SeventvBadges.hpp"
@@ -1782,6 +1783,8 @@ std::pair<MessagePtrMut, HighlightAlert> MessageBuilder::makeIrcMessage(
     builder->serverReceivedTime = calculateMessageTime(ircMessage);
     builder.emplace<TimestampElement>(builder->serverReceivedTime.time());
 
+    builder.appendItzonAvatar(itzonChannel);
+
     bool shouldAddModerationElements = [&] {
         if (senderIsBroadcaster)
         {
@@ -1804,11 +1807,15 @@ std::pair<MessagePtrMut, HighlightAlert> MessageBuilder::makeIrcMessage(
     }
 
     builder.appendTwitchBadges(tags, twitchChannel);
+    builder.appendItzonBadges(itzonChannel);
 
-    builder.appendChatterinoBadges(userID);
-    builder.appendFfzBadges(twitchChannel, userID);
-    builder.appendBttvBadges(userID);
-    builder.appendSeventvBadges(userID);
+    if (itzonChannel == nullptr)
+    {
+        builder.appendChatterinoBadges(userID);
+        builder.appendFfzBadges(twitchChannel, userID);
+        builder.appendBttvBadges(userID);
+        builder.appendSeventvBadges(userID);
+    }
 
     builder.appendUsername(tags, args);
 
@@ -2658,6 +2665,92 @@ void MessageBuilder::appendTwitchBadges(Communi::TagsRef tags,
 
     auto badgeInfos = parseBadgeInfoTag(tags);
     appendBadges(this, badges, badgeInfos, twitchChannel);
+}
+
+void MessageBuilder::appendItzonBadges(ItzonChannel *itzonChannel)
+{
+    if (itzonChannel == nullptr)
+    {
+        return;
+    }
+
+    const auto user = itzonChannel->chatUser(this->message().loginName);
+    if (!user)
+    {
+        return;
+    }
+
+    const auto appendRole = [this](QStringView name) {
+        auto [emote, flag] = ItzonBadges::role(name);
+        if (emote)
+        {
+            this->emplace<BadgeElement>(emote, flag);
+            this->message().externalBadges.emplace_back(
+                QStringLiteral("itzon:") + emote->name.string);
+        }
+    };
+    if (user->staff)
+    {
+        appendRole(u"staff");
+    }
+    if (user->owner || this->message().loginName.compare(
+                           itzonChannel->getName(), Qt::CaseInsensitive) == 0)
+    {
+        appendRole(u"op");
+    }
+    if (user->bot)
+    {
+        appendRole(u"bot");
+    }
+    if (user->moderator)
+    {
+        appendRole(u"mod");
+    }
+    if (user->partner)
+    {
+        appendRole(u"partner");
+    }
+    if (user->vip)
+    {
+        appendRole(u"vip");
+    }
+    if (user->subscriber)
+    {
+        auto [emote, flag] = ItzonBadges::subscriber(user->subscriberBadge);
+        this->emplace<BadgeElement>(emote, flag);
+        this->message().externalBadges.emplace_back(QStringLiteral("itzon:") +
+                                                    emote->name.string);
+    }
+    if (user->unverified)
+    {
+        appendRole(u"unverified");
+    }
+}
+
+void MessageBuilder::appendItzonAvatar(ItzonChannel *itzonChannel)
+{
+    if (itzonChannel == nullptr)
+    {
+        return;
+    }
+    const auto user = itzonChannel->chatUser(this->message().loginName);
+    if (!user)
+    {
+        return;
+    }
+    const auto url =
+        ItzonChannel::avatarUrl(user->userID, user->avatarExtension);
+    if (!url)
+    {
+        return;
+    }
+
+    this->emplace<CircularImageElement>(Image::fromAutoscaledUrl(*url, 18), 0,
+                                        Qt::transparent,
+                                        MessageElementFlag::UserAvatar)
+        ->setTooltip(this->message().displayName.isEmpty()
+                         ? this->message().loginName
+                         : this->message().displayName);
 }
 
 void MessageBuilder::appendChatterinoBadges(const QString &userID)

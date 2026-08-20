@@ -16,6 +16,7 @@
 
 #include <IrcMessage>
 #include <IrcNetwork>
+#include <QColor>
 #include <QPointer>
 #include <QSslSocket>
 #include <QTimer>
@@ -56,6 +57,40 @@ QString ircCommand(QString prefix, QString message)
         }
     }
     return prefix + message;
+}
+
+void applyChatUserTags(ItzonChannel &channel, const QString &name,
+                       const Communi::IrcMessage &message)
+{
+    auto user = channel.chatUser(name).value_or(ItzonChannel::ChatUser{});
+    const auto tags = message.tags();
+    if (tags.has("sub-badge"))
+    {
+        user.subscriber = true;
+        user.subscriberBadge = tags.getOrEmpty("sub-badge");
+    }
+    if (tags.has("partner"))
+    {
+        user.partner = tags.getOrEmpty("partner") == "1";
+    }
+    if (tags.has("user-id"))
+    {
+        user.userID = tags.getOrEmpty("user-id");
+    }
+    if (tags.has("avatar"))
+    {
+        user.avatarExtension = tags.getOrEmpty("avatar");
+    }
+    channel.setChatUser(name, std::move(user));
+
+    if (tags.has("color"))
+    {
+        const QColor color(tags.getOrEmpty("color"));
+        if (color.isValid())
+        {
+            channel.setUserColor(name, color);
+        }
+    }
 }
 
 }  // namespace
@@ -311,6 +346,9 @@ void ItzonChatServer::handleMessage(const std::shared_ptr<Client> &client,
             if (auto channel = this->channels_.value(channelName).lock();
                 currentClient && channel)
             {
+                channel->clearChatUsers();
+                channel->setMod(false);
+                channel->setVip(false);
                 channel->addSystemMessage(rejoined ? "rejoined channel"
                                                    : "joined channel");
                 channel->joined.invoke();
@@ -327,6 +365,7 @@ void ItzonChatServer::handleMessage(const std::shared_ptr<Client> &client,
         else if (auto channel = this->channels_.value(channelName).lock();
                  currentClient && channel)
         {
+            applyChatUserTags(*channel, message->nick(), *message);
             channel->addRecentChatter(message->nick());
             if (!this->clients_.contains(message->nick().toLower()) &&
                 getSettings()->showJoins)
@@ -360,14 +399,17 @@ void ItzonChatServer::handleMessage(const std::shared_ptr<Client> &client,
             }
         }
         else if (auto channel = this->channels_.value(channelName).lock();
-                 currentClient && channel &&
-                 !this->clients_.contains(message->nick().toLower()) &&
-                 getSettings()->showParts)
+                 currentClient && channel)
         {
-            channel->addPartedUser(
-                message->nick(), false,
-                message->nick().compare(channel->getName(),
-                                        Qt::CaseInsensitive) == 0);
+            channel->removeChatUser(message->nick());
+            if (!this->clients_.contains(message->nick().toLower()) &&
+                getSettings()->showParts)
+            {
+                channel->addPartedUser(
+                    message->nick(), false,
+                    message->nick().compare(channel->getName(),
+                                            Qt::CaseInsensitive) == 0);
+            }
         }
         return;
     }
@@ -384,29 +426,36 @@ void ItzonChatServer::handleMessage(const std::shared_ptr<Client> &client,
             return;
         }
         const auto channelName = cleanChannelName(*channelIt);
+        const bool currentClient = this->isCurrentClient(client);
         auto &names = client->pendingNames[channelName];
-        static const QString rolePrefixes = QStringLiteral("%@&+~=?");
-        for (auto name : parameters.back().split(' ', Qt::SkipEmptyParts))
+        for (auto entry : parameters.back().split(' ', Qt::SkipEmptyParts))
         {
-            QString prefixes;
-            while (!name.isEmpty() && rolePrefixes.contains(name.front()))
-            {
-                prefixes.append(name.front());
-                name.remove(0, 1);
-            }
+            auto [name, user] = ItzonChannel::parseNamesEntry(std::move(entry));
             if (!name.isEmpty())
             {
                 names.insert(name);
-                if (name.compare(client->account->username(),
-                                 Qt::CaseInsensitive) == 0)
+                if (auto channel = this->channels_.value(channelName).lock();
+                    currentClient && channel)
+                {
+                    auto existing = channel->chatUser(name);
+                    if (existing)
+                    {
+                        user.partner = existing->partner;
+                        user.subscriberBadge = existing->subscriberBadge;
+                        user.userID = existing->userID;
+                        user.avatarExtension = existing->avatarExtension;
+                    }
+                    channel->setChatUser(name, user);
+                }
+                if (currentClient && name.compare(client->account->username(),
+                                                  Qt::CaseInsensitive) == 0)
                 {
                     if (auto channel =
                             this->channels_.value(channelName).lock())
                     {
-                        channel->setMod(prefixes.contains('+') ||
-                                        prefixes.contains('%') ||
-                                        prefixes.contains('@'));
-                        channel->setVip(prefixes.contains('~'));
+                        channel->setMod(user.moderator || user.staff ||
+                                        user.owner);
+                        channel->setVip(user.vip);
                     }
                 }
             }
@@ -419,8 +468,24 @@ void ItzonChatServer::handleMessage(const std::shared_ptr<Client> &client,
         const auto channelName = cleanChannelName(message->parameter(0));
         const auto mode = message->parameter(1);
         const auto target = message->parameter(2);
-        if (target.compare(client->account->username(), Qt::CaseInsensitive) ==
-            0)
+        if (auto channel = this->channels_.value(channelName).lock();
+            this->isCurrentClient(client) && channel)
+        {
+            auto user =
+                channel->chatUser(target).value_or(ItzonChannel::ChatUser{});
+            if (mode == "+v" || mode == "-v")
+            {
+                user.moderator = mode == "+v";
+            }
+            else if (mode == "+V" || mode == "-V")
+            {
+                user.vip = mode == "+V";
+            }
+            channel->setChatUser(target, std::move(user));
+        }
+        if (this->isCurrentClient(client) &&
+            target.compare(client->account->username(), Qt::CaseInsensitive) ==
+                0)
         {
             if (auto channel = this->channels_.value(channelName).lock())
             {
@@ -457,9 +522,23 @@ void ItzonChatServer::handleMessage(const std::shared_ptr<Client> &client,
             {
                 channel->updateOnlineChatters(
                     client->pendingNames.value(channelName));
+                channel->retainChatUsers(
+                    client->pendingNames.value(channelName));
             }
         }
         client->pendingNames.remove(channelName);
+        return;
+    }
+
+    if (command == "META")
+    {
+        const auto channelName = cleanChannelName(message->parameter(0));
+        const auto name = message->parameter(1);
+        if (auto channel = this->channels_.value(channelName).lock();
+            this->isCurrentClient(client) && channel && !name.isEmpty())
+        {
+            applyChatUserTags(*channel, name, *message);
+        }
         return;
     }
 
@@ -549,6 +628,8 @@ void ItzonChatServer::handlePrivateMessage(
     {
         return;
     }
+
+    applyChatUserTags(*channel, message->nick(), *message);
 
     auto id = message->tags().getOrEmpty("msgid");
     if (!id.isEmpty() && !this->rememberMessage(channelName + ':' + id))

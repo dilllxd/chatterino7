@@ -49,7 +49,7 @@ enum class MessageElementFlag : int64_t {
     EmoteText = (1LL << 5),
     Emote = EmoteImage | EmoteText,
 
-    // unused: (1LL << 7),
+    UserAvatar = (1LL << 7),
 
     ChannelPointReward = (1LL << 8),
     ChannelPointRewardImage = ChannelPointReward | EmoteImage,

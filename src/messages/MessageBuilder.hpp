@@ -341,6 +341,8 @@ private:
 
     void appendTwitchBadges(Communi::TagsRef tags,
                             TwitchChannel *twitchChannel);
+    void appendItzonBadges(ItzonChannel *itzonChannel);
+    void appendItzonAvatar(ItzonChannel *itzonChannel);
     void appendChatterinoBadges(const QString &userID);
     void appendFfzBadges(TwitchChannel *twitchChannel, const QString &userID);
     void appendBttvBadges(const QString &userID);

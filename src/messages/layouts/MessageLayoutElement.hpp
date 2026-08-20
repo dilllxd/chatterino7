@@ -161,6 +161,7 @@ public:
 
 protected:
     void paint(QPainter &painter, const MessageColors &messageColors) override;
+    bool paintAnimated(QPainter &painter, qreal yOffset) override;
 
 private:
     const QColor color_;
