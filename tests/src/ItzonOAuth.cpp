@@ -54,3 +54,16 @@ TEST(ItzonOAuth, BuildsDocumentedPublicClientRequest)
               QStringLiteral("S256"));
     EXPECT_FALSE(query.hasQueryItem(QStringLiteral("client_secret")));
 }
+
+TEST(ItzonOAuth, RequestsWriteScopeOnlyWhenEnabled)
+{
+    const auto session = itzon::createOAuthSession();
+    const QUrl redirect(
+        QStringLiteral("http://127.0.0.1:49152/oauth/itzon/callback"));
+    const auto url = itzon::authorizationUrl(
+        QStringLiteral("0123456789abcdef0123456789abcdef"), redirect, session,
+        true);
+
+    EXPECT_EQ(QUrlQuery(url).queryItemValue(QStringLiteral("scope")),
+              QStringLiteral("identity chat api:read api:write"));
+}

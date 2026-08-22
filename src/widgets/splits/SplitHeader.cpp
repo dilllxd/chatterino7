@@ -825,9 +825,9 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
         moreMenu->addAction(action);
     }
 
-    if (twitchChannel)
+    if (twitchChannel || itzonChannel)
     {
-        if (twitchChannel->hasModRights())
+        if (itzonChannel || twitchChannel->hasModRights())
         {
             moreMenu->addAction(
                 "Show chatter list",
@@ -835,10 +835,13 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
                 this->split_, &Split::openChatterList);
         }
 
-        moreMenu->addAction("Subscribe",
-                            h->getDisplaySequence(HotkeyCategory::Split,
-                                                  "openSubscriptionPage"),
-                            this->split_, &Split::openSubPage);
+        if (twitchChannel)
+        {
+            moreMenu->addAction("Subscribe",
+                                h->getDisplaySequence(HotkeyCategory::Split,
+                                                      "openSubscriptionPage"),
+                                this->split_, &Split::openSubPage);
+        }
     }
 
     if (twitchChannel || itzonChannel)
@@ -1332,7 +1335,8 @@ void SplitHeader::updateIcons()
             this->moderationButton_->hide();
         }
 
-        if (channel->hasModRights() && channel->isTwitchChannel())
+        if ((channel->hasModRights() && channel->isTwitchChannel()) ||
+            channel->getType() == Channel::Type::Itzon)
         {
             this->chattersButton_->show();
         }

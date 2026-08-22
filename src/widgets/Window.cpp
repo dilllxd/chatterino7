@@ -850,6 +850,7 @@ void Window::onAccountSelected()
     switch (channelType)
     {
         case Channel::Type::Itzon:
+        case Channel::Type::ItzonWhispers:
             if (auto account = getApp()->getAccounts()->itzon.current())
             {
                 username = account->username();

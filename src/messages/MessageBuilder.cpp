@@ -1809,7 +1809,7 @@ std::pair<MessagePtrMut, HighlightAlert> MessageBuilder::makeIrcMessage(
     builder.appendTwitchBadges(tags, twitchChannel);
     builder.appendItzonBadges(itzonChannel);
 
-    if (itzonChannel == nullptr)
+    if (!channel->isItzonChannel())
     {
         builder.appendChatterinoBadges(userID);
         builder.appendFfzBadges(twitchChannel, userID);

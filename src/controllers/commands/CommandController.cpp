@@ -44,6 +44,7 @@
 #include "messages/Message.hpp"
 #include "messages/MessageBuilder.hpp"
 #include "providers/emoji/Emojis.hpp"
+#include "providers/itzon/ItzonChannel.hpp"
 #include "providers/kick/KickChannel.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
@@ -597,10 +598,44 @@ QString CommandController::execCommand(const QString &textNoEmoji,
 
     if (!dryRun)
     {
+        if (auto *itzonChannel =
+                channel ? dynamic_cast<ItzonChannel *>(channel.get()) : nullptr)
+        {
+            const auto name = commandName.toLower();
+            const auto argument = words.mid(1).join(' ');
+            if (name == QStringLiteral("/settitle"))
+            {
+                itzonChannel->setStreamTitle(argument);
+                return {};
+            }
+            if (name == QStringLiteral("/setgame") ||
+                name == QStringLiteral("/setcategory"))
+            {
+                itzonChannel->setStreamCategory(argument);
+                return {};
+            }
+            if (name == QStringLiteral("/setlanguage"))
+            {
+                itzonChannel->setStreamLanguage(argument);
+                return {};
+            }
+        }
+
         // itzon.tv handles these commands in its IRC server.
         if (channel && channel->isItzonChannel() &&
             isItzonServerCommand(commandName))
         {
+            if (channel->getType() == Channel::Type::ItzonWhispers)
+            {
+                channel->addSystemMessage(
+                    "Use .w <username> <message> from an itzon.tv channel to "
+                    "whisper");
+                return {};
+            }
+            if (text.startsWith('/'))
+            {
+                text[0] = '.';
+            }
             return text;
         }
 
@@ -644,6 +679,13 @@ QString CommandController::execCommand(const QString &textNoEmoji,
     if (!dryRun && channel->getType() == Channel::Type::TwitchWhispers)
     {
         channel->addSystemMessage("Use /w <username> <message> to whisper");
+        return "";
+    }
+    if (!dryRun && channel->getType() == Channel::Type::ItzonWhispers)
+    {
+        channel->addSystemMessage(
+            "Use .w <username> <message> from an itzon.tv channel to "
+            "whisper");
         return "";
     }
 

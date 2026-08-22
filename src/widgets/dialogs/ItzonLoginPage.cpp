@@ -13,6 +13,7 @@
 #include "util/HttpServer.hpp"
 
 #include <QApplication>
+#include <QCheckBox>
 #include <QClipboard>
 #include <QDateTime>
 #include <QDesktopServices>
@@ -54,7 +55,7 @@ QString oauthError(const NetworkResult &result)
 class ItzonOAuthDialog final : public QDialog
 {
 public:
-    explicit ItzonOAuthDialog(QWidget *parent = nullptr)
+    explicit ItzonOAuthDialog(bool requestApiWrite, QWidget *parent = nullptr)
         : QDialog(parent)
         , clientID_(itzon::oauthClientID())
         , session_(itzon::createOAuthSession())
@@ -82,8 +83,9 @@ public:
             this->redirectURI_.setHost(QStringLiteral("127.0.0.1"));
             this->redirectURI_.setPort(this->server_->port());
             this->redirectURI_.setPath(QStringLiteral("/oauth/itzon/callback"));
-            this->authorizeURL_ = itzon::authorizationUrl(
-                this->clientID_, this->redirectURI_, this->session_);
+            this->authorizeURL_ =
+                itzon::authorizationUrl(this->clientID_, this->redirectURI_,
+                                        this->session_, requestApiWrite);
             this->server_->setHandler([this](const QString &requestTarget) {
                 return this->handleCallback(requestTarget);
             });
@@ -280,6 +282,8 @@ ItzonLoginPage::ItzonLoginPage()
     auto *basic = new QWidget(tabs);
     auto *basicLayout = new QVBoxLayout(basic);
     auto *oauthButton = new QPushButton("Log in (Opens in browser)", basic);
+    auto *streamInfo = new QCheckBox(
+        "Allow changing my stream title, category, and language", basic);
     const auto oauthAvailable = !itzon::oauthClientID().isEmpty();
     oauthButton->setEnabled(oauthAvailable);
     if (!oauthAvailable)
@@ -287,13 +291,15 @@ ItzonLoginPage::ItzonLoginPage()
         oauthButton->setToolTip(
             "This build has no registered itzon OAuth public-client ID.");
     }
-    QObject::connect(oauthButton, &QPushButton::clicked, this, [this] {
-        auto *dialog = new ItzonOAuthDialog(this);
-        QObject::connect(dialog, &QDialog::accepted, this, [this] {
-            this->window()->close();
+    QObject::connect(
+        oauthButton, &QPushButton::clicked, this, [this, streamInfo] {
+            auto *dialog = new ItzonOAuthDialog(streamInfo->isChecked(), this);
+            QObject::connect(dialog, &QDialog::accepted, this, [this] {
+                this->window()->close();
+            });
+            dialog->show();
         });
-        dialog->show();
-    });
+    basicLayout->addWidget(streamInfo);
     basicLayout->addWidget(oauthButton);
     basicLayout->addStretch(1);
     tabs->addTab(basic, "Basic");

@@ -43,12 +43,17 @@ ItzonChannel::ItzonChannel(const QString &name)
     QObject::connect(&this->seventvStartupTimer_, &QTimer::timeout, [this] {
         this->markSeventvEmotesReady();
     });
+    this->seventvRefreshTimer_.setInterval(5 * 60 * 1000);
+    QObject::connect(&this->seventvRefreshTimer_, &QTimer::timeout, [this] {
+        this->reloadSeventvEmotes(false);
+    });
 }
 
 void ItzonChannel::initialize()
 {
     this->seventvStartupTimer_.start();
     this->reloadSeventvEmotes(false);
+    this->seventvRefreshTimer_.start();
     this->refreshStreamData();
     this->streamDataTimer_.start();
 }
@@ -92,11 +97,15 @@ void ItzonChannel::reloadSeventvEmotes(bool manualRefresh)
                 QStringLiteral("^[0-9]{1,32}$")};
             if (!validTwitchID.match(twitchID).hasMatch())
             {
+                const bool firstLoad = !self->seventvEmotesReady_;
                 self->seventvTwitchID_.clear();
                 self->seventvEmotes_.set(EMPTY_EMOTE_MAP);
-                self->addSystemMessage(
-                    "7TV channel emotes unavailable - no Twitch account is "
-                    "linked in this channel's itzon.tv settings.");
+                if (manualRefresh || firstLoad)
+                {
+                    self->addSystemMessage(
+                        "7TV channel emotes unavailable - no Twitch account "
+                        "is linked in this channel's itzon.tv settings.");
+                }
                 self->markSeventvEmotesReady();
                 return;
             }
@@ -131,17 +140,22 @@ void ItzonChannel::reloadSeventvEmotes(bool manualRefresh)
                 },
                 manualRefresh, cacheHit);
         })
-        .onError([weak](const NetworkResult &result) {
+        .onError([weak, manualRefresh](const NetworkResult &result) {
             qCWarning(chatterinoSeventv)
                 << "Failed to resolve itzon.tv 7TV mapping:"
                 << result.formatError();
             if (auto self = weak.lock())
             {
+                const bool firstLoad = !self->seventvEmotesReady_;
                 self->markSeventvEmotesReady();
-                self->addSystemMessage(
-                    QStringLiteral("Failed to resolve this channel's itzon.tv "
-                                   "7TV mapping. (Error: %1)")
-                        .arg(result.formatError()));
+                if (manualRefresh || firstLoad)
+                {
+                    self->addSystemMessage(
+                        QStringLiteral(
+                            "Failed to resolve this channel's itzon.tv 7TV "
+                            "mapping. (Error: %1)")
+                            .arg(result.formatError()));
+                }
             }
         })
         .execute();
@@ -234,6 +248,11 @@ std::optional<ItzonChannel::ChatUser> ItzonChannel::chatUser(
         return std::nullopt;
     }
     return *it;
+}
+
+const QHash<QString, ItzonChannel::ChatUser> &ItzonChannel::chatUsers() const
+{
+    return this->chatUsers_;
 }
 
 void ItzonChannel::setChatUser(const QString &name, ChatUser user)
@@ -357,6 +376,14 @@ void ItzonChannel::refreshStreamData()
             data.live = json["live"].toBool();
             data.title = json["title"].toString().trimmed();
             data.category = json["category"].toString().trimmed();
+            if (json["categoryId"].isDouble())
+            {
+                data.categoryID = json["categoryId"].toInteger();
+            }
+            else if (json["categoryId"].isNull())
+            {
+                data.categoryID.reset();
+            }
             data.language = json["language"].toString().trimmed();
             if (json["followers"].isDouble())
             {
@@ -369,6 +396,7 @@ void ItzonChannel::refreshStreamData()
                     std::max<qint64>(0, json["viewers"].toInteger()));
             }
 
+            self->publicApiMetadataReady_ = true;
             self->updateStreamData(std::move(data));
             self->fetchPublicChannelInfo(true);
         })
@@ -534,6 +562,16 @@ bool ItzonChannel::canSendMessage() const
     return getApp()->getItzonChatServer()->canSend();
 }
 
+bool ItzonChannel::canReconnect() const
+{
+    return true;
+}
+
+void ItzonChannel::reconnect()
+{
+    getApp()->getItzonChatServer()->reconnectCurrent();
+}
+
 bool ItzonChannel::isMod() const
 {
     return this->isMod_;
@@ -585,6 +623,167 @@ void ItzonChannel::sendReply(const QString &message, const QString &replyToID)
 {
     getApp()->getItzonChatServer()->sendReply(this->getName(), message,
                                               replyToID);
+}
+
+std::shared_ptr<ItzonAccount> ItzonChannel::writableAccount()
+{
+    const auto account = getApp()->getAccounts()->itzon.current();
+    if (!this->isBroadcaster())
+    {
+        this->addSystemMessage(
+            "Stream information can only be changed from your own channel.");
+        return {};
+    }
+    if (!account || !account->isOAuth() ||
+        !account->hasScope(QStringLiteral("api:write")))
+    {
+        this->addSystemMessage(
+            "Changing stream information requires signing in again with the "
+            "stream-info permission enabled.");
+        return {};
+    }
+    if (!account->accessTokenValid())
+    {
+        account->refreshIfNeeded();
+        this->addSystemMessage(
+            "Your itzon.tv access token is refreshing. Try again shortly.");
+        return {};
+    }
+    if (!this->publicApiMetadataReady_)
+    {
+        this->addSystemMessage(
+            "Channel metadata is still loading. Try again shortly.");
+        return {};
+    }
+    return account;
+}
+
+void ItzonChannel::updateStreamInfo(const QString &title,
+                                    std::optional<qint64> categoryID,
+                                    const QString &language)
+{
+    const auto account = this->writableAccount();
+    if (!account)
+    {
+        return;
+    }
+
+    const auto normalizedLanguage = language.trimmed().isEmpty()
+                                        ? QStringLiteral("und")
+                                        : language.trimmed();
+    QJsonObject payload{
+        {QStringLiteral("title"), title},
+        {QStringLiteral("categoryId"),
+         categoryID ? QJsonValue(*categoryID) : QJsonValue(QJsonValue::Null)},
+        {QStringLiteral("language"), normalizedLanguage},
+    };
+    auto weak = this->weakFromThis();
+    NetworkRequest(
+        QStringLiteral("https://itzon.tv/api/public/v1/me/stream-info"),
+        NetworkRequestType::Put)
+        .header("Authorization",
+                QByteArrayLiteral("Bearer ") + account->token().toUtf8())
+        .header("Content-Type", "application/json")
+        .payload(QJsonDocument(payload).toJson(QJsonDocument::Compact))
+        .timeout(10000)
+        .onSuccess([weak](const NetworkResult &result) {
+            auto self = weak.lock();
+            if (!self)
+            {
+                return;
+            }
+            const auto json = result.parseJson();
+            auto data = self->streamData_;
+            data.title = json["title"].toString().trimmed();
+            data.category = json["category"].toString().trimmed();
+            data.language = json["language"].toString().trimmed();
+            if (json["categoryId"].isDouble())
+            {
+                data.categoryID = json["categoryId"].toInteger();
+            }
+            else
+            {
+                data.categoryID.reset();
+            }
+            self->updateStreamData(std::move(data));
+            self->addSystemMessage("Stream information updated.");
+        })
+        .onError([weak](const NetworkResult &result) {
+            if (auto self = weak.lock())
+            {
+                const auto error = result.parseJson()["error"].toString();
+                self->addSystemMessage(
+                    QStringLiteral("Failed to update stream information: %1")
+                        .arg(error.isEmpty() ? result.formatError() : error));
+            }
+        })
+        .execute();
+}
+
+void ItzonChannel::setStreamTitle(const QString &title)
+{
+    this->updateStreamInfo(title.left(200), this->streamData_.categoryID,
+                           this->streamData_.language);
+}
+
+void ItzonChannel::setStreamCategory(const QString &category)
+{
+    const auto account = this->writableAccount();
+    if (!account)
+    {
+        return;
+    }
+    if (category.trimmed().isEmpty())
+    {
+        this->updateStreamInfo(this->streamData_.title, std::nullopt,
+                               this->streamData_.language);
+        return;
+    }
+
+    auto weak = this->weakFromThis();
+    NetworkRequest(QStringLiteral("https://itzon.tv/api/public/v1/categories"))
+        .header("Authorization",
+                QByteArrayLiteral("Bearer ") + account->token().toUtf8())
+        .timeout(10000)
+        .onSuccess([weak, category](const NetworkResult &result) {
+            auto self = weak.lock();
+            if (!self)
+            {
+                return;
+            }
+            for (const auto value : result.parseJson()["categories"].toArray())
+            {
+                const auto item = value.toObject();
+                if (item["name"].toString().compare(category.trimmed(),
+                                                    Qt::CaseInsensitive) == 0)
+                {
+                    self->updateStreamInfo(self->streamData_.title,
+                                           item["id"].toInteger(),
+                                           self->streamData_.language);
+                    return;
+                }
+            }
+            self->addSystemMessage(
+                QStringLiteral("No itzon.tv category named ‘%1’ was found.")
+                    .arg(category.trimmed()));
+        })
+        .onError([weak](const NetworkResult &result) {
+            if (auto self = weak.lock())
+            {
+                self->addSystemMessage(
+                    QStringLiteral("Failed to load itzon.tv categories: %1")
+                        .arg(result.formatError()));
+            }
+        })
+        .execute();
+}
+
+void ItzonChannel::setStreamLanguage(const QString &language)
+{
+    this->updateStreamInfo(this->streamData_.title,
+                           this->streamData_.categoryID,
+                           language.trimmed().isEmpty() ? QStringLiteral("und")
+                                                        : language.trimmed());
 }
 
 }  // namespace chatterino

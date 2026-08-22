@@ -19,6 +19,7 @@ QString oauthClientID();
 OAuthSession createOAuthSession();
 
 QUrl authorizationUrl(const QString &clientID, const QUrl &redirectURI,
-                      const OAuthSession &session);
+                      const OAuthSession &session,
+                      bool requestApiWrite = false);
 
 }  // namespace chatterino::itzon

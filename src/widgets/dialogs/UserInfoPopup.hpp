@@ -55,11 +55,12 @@ protected:
 private:
     void installEvents();
     void updateUserData();
+    void updateItzonUserData();
     void updateLatestMessages();
     void updateNotes();
 
     void loadAvatar(const QString &userID, const QString &pictureURL,
-                    bool isKick);
+                    bool isKick, bool loadSevenTV = true);
 
     void loadSevenTVAvatar(const QString &userID, bool isKick);
     void setSevenTVAvatar(const QString &filename, const QByteArray &format);
@@ -71,6 +72,7 @@ private:
 
     void updateKickUserData();
     void onKickProfilePictureClick(Qt::MouseButton button);
+    void onItzonProfilePictureClick(Qt::MouseButton button);
 
     QStringView platformName() const;
 
@@ -143,6 +145,7 @@ private:
     QPointer<EditUserNotesDialog> editUserNotesDialog_;
 
     bool isKick_ = false;
+    bool isItzon_ = false;
     uint64_t kickUserID_ = 0;
 
     class TimeoutWidget : public BaseWidget

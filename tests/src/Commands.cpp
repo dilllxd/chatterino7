@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
+#include "common/Channel.hpp"
 #include "controllers/accounts/AccountController.hpp"
 #include "controllers/commands/Command.hpp"
 #include "controllers/commands/CommandContext.hpp"
@@ -69,6 +70,19 @@ public:
 }  // namespace
 
 namespace chatterino {
+
+TEST(Commands, itzonServerCommandsUseDocumentedPrefix)
+{
+    MockApplication app;
+    auto channel = std::make_shared<Channel>("channel", Channel::Type::Itzon);
+
+    EXPECT_EQ(app.commands.execCommand("/ban chatter", channel, false),
+              ".ban chatter");
+    EXPECT_EQ(app.commands.execCommand(".pin message-id", channel, false),
+              ".pin message-id");
+    EXPECT_EQ(app.commands.execCommand("/not-an-itzon-command", channel, false),
+              "/not-an-itzon-command");
+}
 
 TEST(Commands, parseBanActions)
 {

@@ -324,6 +324,9 @@ SelectChannelDialog::SelectChannelDialog(QWidget *parent)
     {
         ui.itzonPage = new QWidget;
         auto *itzonLayout = new QVBoxLayout(ui.itzonPage);
+        ui.itzonChannel = new AutoCheckedRadioButton("Channel");
+        ui.itzonChannel->setChecked(true);
+        itzonLayout->addWidget(ui.itzonChannel);
         auto *itzonLabel =
             new QLabel("Join an itzon.tv channel by its channel name");
         itzonLabel->setWordWrap(true);
@@ -331,6 +334,21 @@ SelectChannelDialog::SelectChannelDialog(QWidget *parent)
         ui.itzonName = new QLineEdit;
         ui.itzonName->setPlaceholderText("Channel name");
         itzonLayout->addWidget(ui.itzonName);
+        QObject::connect(ui.itzonChannel, &QRadioButton::toggled, this,
+                         [this, itzonLabel](bool checked) {
+                             itzonLabel->setVisible(checked);
+                             this->ui_.itzonName->setVisible(checked);
+                         });
+
+        ui.itzonWhispers = new AutoCheckedRadioButton("Whispers");
+        itzonLayout->addWidget(ui.itzonWhispers);
+        auto *whispersLabel = new QLabel(
+            "Shows itzon.tv whispers received while Chatterino is running");
+        whispersLabel->setWordWrap(true);
+        whispersLabel->hide();
+        itzonLayout->addWidget(whispersLabel);
+        QObject::connect(ui.itzonWhispers, &QRadioButton::toggled,
+                         whispersLabel, &QWidget::setVisible);
         itzonLayout->addStretch(1);
         ui.notebook->addPage(ui.itzonPage, "itzon.tv");
     }
@@ -478,8 +496,14 @@ void SelectChannelDialog::setSelectedChannel(
         }
         break;
         case Channel::Type::Itzon: {
+            this->ui_.itzonChannel->setChecked(true);
             this->ui_.itzonName->setText(channel->getName());
             this->ui_.itzonName->selectAll();
+            this->ui_.notebook->select(this->ui_.itzonPage);
+        }
+        break;
+        case Channel::Type::ItzonWhispers: {
+            this->ui_.itzonWhispers->setChecked(true);
             this->ui_.notebook->select(this->ui_.itzonPage);
         }
         break;
@@ -525,6 +549,10 @@ IndirectChannel SelectChannelDialog::getSelectedChannel() const
 
     if (this->ui_.notebook->isSelected(this->ui_.itzonPage))
     {
+        if (this->ui_.itzonWhispers->isChecked())
+        {
+            return getApp()->getItzonChatServer()->getWhispersChannel();
+        }
         return getApp()->getItzonChatServer()->getOrCreate(
             this->ui_.itzonName->text().trimmed());
     }

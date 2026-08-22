@@ -18,6 +18,7 @@
 namespace chatterino {
 
 class EmoteMap;
+class ItzonAccount;
 class MessageThread;
 struct Emote;
 using EmotePtr = std::shared_ptr<const Emote>;
@@ -47,6 +48,7 @@ public:
         bool live = false;
         QString title;
         QString category;
+        std::optional<qint64> categoryID;
         QString language;
         QString thumbnailUrl;
         QString uptime;
@@ -75,6 +77,7 @@ public:
     static std::optional<Url> avatarUrl(const QString &userID,
                                         const QString &avatarExtension);
     std::optional<ChatUser> chatUser(const QString &name) const;
+    const QHash<QString, ChatUser> &chatUsers() const;
     void setChatUser(const QString &name, ChatUser user);
     void removeChatUser(const QString &name);
     void retainChatUsers(const std::unordered_set<QString> &names);
@@ -83,6 +86,8 @@ public:
         const QString &messageID);
 
     bool canSendMessage() const override;
+    bool canReconnect() const override;
+    void reconnect() override;
     bool isMod() const override;
     bool isBroadcaster() const override;
     bool hasHighRateLimit() const override;
@@ -91,6 +96,9 @@ public:
     void setVip(bool vip);
     void sendMessage(const QString &message) override;
     void sendReply(const QString &message, const QString &replyToID);
+    void setStreamTitle(const QString &title);
+    void setStreamCategory(const QString &category);
+    void setStreamLanguage(const QString &language);
 
 private:
     std::shared_ptr<ItzonChannel> sharedFromThis();
@@ -100,10 +108,15 @@ private:
     void fetchPublicChannelInfo(bool preserveKnownLive);
     void fetchPublicBadge(bool preserveKnownLive);
     void updateStreamData(StreamData data);
+    std::shared_ptr<ItzonAccount> writableAccount();
+    void updateStreamInfo(const QString &title,
+                          std::optional<qint64> categoryID,
+                          const QString &language);
 
     Atomic<std::shared_ptr<const EmoteMap>> seventvEmotes_;
     QString seventvTwitchID_;
     QTimer seventvStartupTimer_;
+    QTimer seventvRefreshTimer_;
     bool seventvEmotesReady_ = false;
     QHash<QString, ChatUser> chatUsers_;
     std::unordered_map<QString, std::weak_ptr<MessageThread>> threads_;
@@ -112,6 +125,7 @@ private:
     StreamData streamData_;
     QTimer streamDataTimer_;
     bool streamDataRequestPending_ = false;
+    bool publicApiMetadataReady_ = false;
 };
 
 }  // namespace chatterino

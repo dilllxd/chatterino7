@@ -1374,11 +1374,21 @@ void Split::openChatterList()
         return;
     }
 
-    auto *twitchChannel = dynamic_cast<TwitchChannel *>(channel.get());
-    if (twitchChannel == nullptr)
+    ChatterListWidget *chatterDock = nullptr;
+    MessagePlatform platform = MessagePlatform::AnyOrTwitch;
+    if (auto *twitchChannel = dynamic_cast<TwitchChannel *>(channel.get()))
+    {
+        chatterDock = new ChatterListWidget(twitchChannel, this);
+    }
+    else if (auto *itzonChannel = dynamic_cast<ItzonChannel *>(channel.get()))
+    {
+        chatterDock = new ChatterListWidget(itzonChannel, this);
+        platform = MessagePlatform::Itzon;
+    }
+    else
     {
         qCWarning(chatterinoWidget)
-            << "Chatter list opened in a non-Twitch channel";
+            << "Chatter list opened in an unsupported channel";
         return;
     }
 
@@ -1386,12 +1396,9 @@ void Split::openChatterList()
     const auto chatterListHeight =
         this->height() - this->header_->height() - this->input_->height();
 
-    auto *chatterDock = new ChatterListWidget(twitchChannel, this);
-
     QObject::connect(chatterDock, &ChatterListWidget::userClicked,
-                     [this](const QString &userLogin) {
-                         this->view_->showUserInfoPopup(
-                             userLogin, MessagePlatform::AnyOrTwitch);
+                     [this, platform](const QString &userLogin) {
+                         this->view_->showUserInfoPopup(userLogin, platform);
                      });
 
     chatterDock->resize(chatterListWidth, chatterListHeight);
@@ -1578,6 +1585,7 @@ SplitDescriptor Split::buildDescriptor() const
         break;
 
         case Channel::Type::TwitchWhispers:
+        case Channel::Type::ItzonWhispers:
         case Channel::Type::TwitchWatching:
         case Channel::Type::TwitchMentions:
         case Channel::Type::TwitchLive:

@@ -63,6 +63,7 @@ public:
         /// Misc
         Misc,
         Multi,
+        ItzonWhispers,
     };
 
     explicit Channel(const QString &name, Type type);
@@ -252,6 +253,8 @@ constexpr magic_enum::customize::customize_t
             return "kick";
         case Type::Itzon:
             return "itzon";
+        case Type::ItzonWhispers:
+            return "itzon-whispers";
         case Type::Multi:
             return "multi";
 

@@ -17,6 +17,10 @@
 #include "controllers/userdata/UserDataController.hpp"
 #include "messages/Message.hpp"
 #include "messages/MessageBuilder.hpp"
+#include "providers/itzon/ItzonAccount.hpp"
+#include "providers/itzon/ItzonApiToken.hpp"
+#include "providers/itzon/ItzonChannel.hpp"
+#include "providers/itzon/ItzonChatServer.hpp"
 #include "providers/IvrApi.hpp"
 #include "providers/kick/KickAccount.hpp"
 #include "providers/kick/KickApi.hpp"
@@ -313,6 +317,11 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
                     this->onKickProfilePictureClick(button);
                     return;
                 }
+                if (this->isItzon_)
+                {
+                    this->onItzonProfilePictureClick(button);
+                    return;
+                }
 
                 QUrl channelURL("https://www.twitch.tv/" +
                                 this->userName_.toLower());
@@ -510,6 +519,12 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
         user->addStretch(1);
 
         QObject::connect(usercard.getElement(), &Button::leftClicked, [this] {
+            if (this->isItzon_)
+            {
+                QDesktopServices::openUrl("https://itzon.tv/" +
+                                          this->userName_.toLower());
+                return;
+            }
             QDesktopServices::openUrl("https://www.twitch.tv/popout/" +
                                       this->underlyingChannel_->getName() +
                                       "/viewercard/" + this->userName_);
@@ -562,6 +577,16 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
                 visibilityModButtons =
                     twitchChannel->isBroadcaster() && !isMyself;
             }
+            else if (auto *itzonChannel = dynamic_cast<ItzonChannel *>(
+                         this->underlyingChannel_.get()))
+            {
+                const auto account = getApp()->getAccounts()->itzon.current();
+                const bool isMyself =
+                    account && account->username().compare(
+                                   this->userName_, Qt::CaseInsensitive) == 0;
+                visibilityModButtons =
+                    itzonChannel->isBroadcaster() && !isMyself;
+            }
             mod->setVisible(visibilityModButtons);
             unmod->setVisible(visibilityModButtons);
             vip->setVisible(visibilityModButtons);
@@ -608,6 +633,15 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
                     getApp()->getAccounts()->kick.current()->username().compare(
                         this->userName_, Qt::CaseInsensitive) == 0;
                 visible = kickChannel->hasModRights() && !isMyself;
+            }
+            else if (auto *itzonChannel = dynamic_cast<ItzonChannel *>(
+                         this->underlyingChannel_.get()))
+            {
+                const auto account = getApp()->getAccounts()->itzon.current();
+                const bool isMyself =
+                    account && account->username().compare(
+                                   this->userName_, Qt::CaseInsensitive) == 0;
+                visible = itzonChannel->hasModRights() && !isMyself;
             }
             lineMod->setVisible(visible);
             timeout->setVisible(visible);
@@ -735,7 +769,7 @@ void UserInfoPopup::installEvents()
     QObject::connect(
         this->ui_.block, &QCheckBox::stateChanged,
         [this](int newState) mutable {
-            if (this->isKick_)
+            if (this->isKick_ || this->isItzon_)
             {
                 return;
             }
@@ -929,6 +963,7 @@ void UserInfoPopup::setData(const QString &name,
     this->setWindowTitle(
         TEXT_TITLE.arg(name, this->underlyingChannel_->getName()));
     this->isKick_ = this->underlyingChannel_->getType() == Channel::Type::Kick;
+    this->isItzon_ = this->underlyingChannel_->isItzonChannel();
     if (this->isKick_)
     {
         this->ui_.timeoutWidget->setMinTimeout(60);
@@ -944,6 +979,10 @@ void UserInfoPopup::setData(const QString &name,
         {
             this->ui_.pronounsLabel->hide();
         }
+    }
+    else if (this->isItzon_)
+    {
+        this->updateItzonUserData();
     }
     else
     {
@@ -961,9 +1000,9 @@ void UserInfoPopup::setData(const QString &name,
     auto type = this->channel_->getType();
     if (type == Channel::Type::TwitchLive ||
         type == Channel::Type::TwitchWhispers || type == Channel::Type::Misc ||
-        type == Channel::Type::Kick)
+        type == Channel::Type::Kick || type == Channel::Type::Itzon ||
+        type == Channel::Type::ItzonWhispers)
     {
-        // not a normal twitch channel, the url opened by the button will be invalid, so hide the button
         this->ui_.usercardLabel->hide();
     }
 }
@@ -1264,8 +1303,176 @@ void UserInfoPopup::updateUserData()
     this->ui_.ignoreHighlights->setVisible(!isMyself);
 }
 
+void UserInfoPopup::updateItzonUserData()
+{
+    auto *channel =
+        dynamic_cast<ItzonChannel *>(this->underlyingChannel_.get());
+    const auto user = channel ? channel->chatUser(this->userName_)
+                              : std::optional<ItzonChannel::ChatUser>{};
+    const auto rawUserID = user ? user->userID : QString{};
+    this->userId_ =
+        QStringLiteral("itzon:") +
+        (rawUserID.isEmpty() ? this->userName_.toLower() : rawUserID);
+    this->ui_.userIDLabel->setText(
+        TEXT_USER_ID %
+        (rawUserID.isEmpty() ? TEXT_UNAVAILABLE : QStringView(rawUserID)));
+    this->ui_.userIDLabel->setProperty(
+        "copy-text",
+        rawUserID.isEmpty() ? TEXT_UNAVAILABLE.toString() : rawUserID);
+    this->ui_.createdDateLabel->hide();
+    this->ui_.followageLabel->setText({});
+    this->ui_.liveIndicator->hide();
+    if (this->ui_.pronounsLabel)
+    {
+        this->ui_.pronounsLabel->hide();
+    }
+
+    QStringList roles;
+    bool loadedAvatar = false;
+    if (user)
+    {
+        if (user->staff)
+        {
+            roles.append("Staff");
+        }
+        if (user->owner)
+        {
+            roles.append("Owner");
+        }
+        if (user->bot)
+        {
+            roles.append("Bot");
+        }
+        if (user->moderator)
+        {
+            roles.append("Moderator");
+        }
+        if (user->vip)
+        {
+            roles.append("VIP");
+        }
+        if (user->partner)
+        {
+            roles.append("Partner");
+        }
+        if (user->unverified)
+        {
+            roles.append("Unverified");
+        }
+        if (!user->subscriberBadge.isEmpty())
+        {
+            roles.append(
+                QStringLiteral("Badge: %1").arg(user->subscriberBadge));
+        }
+        else if (user->subscriber)
+        {
+            roles.append("Subscriber");
+        }
+
+        if (const auto avatar =
+                ItzonChannel::avatarUrl(user->userID, user->avatarExtension))
+        {
+            if (getApp()->getStreamerMode()->isEnabled() &&
+                getSettings()->streamerModeHideUsercardAvatars)
+            {
+                this->ui_.avatarButton->setPixmap(getResources().streamerMode);
+            }
+            else
+            {
+                this->loadAvatar(user->userID, avatar->string, false, false);
+            }
+            loadedAvatar = true;
+        }
+    }
+    this->ui_.subageLabel->setText(roles.join(QStringLiteral(" · ")));
+
+    const auto account = getApp()->getAccounts()->itzon.current();
+    const bool isMyself =
+        account &&
+        account->username().compare(this->userName_, Qt::CaseInsensitive) == 0;
+    if (!loadedAvatar && isMyself && !account->avatar().isEmpty())
+    {
+        if (getApp()->getStreamerMode()->isEnabled() &&
+            getSettings()->streamerModeHideUsercardAvatars)
+        {
+            this->ui_.avatarButton->setPixmap(getResources().streamerMode);
+        }
+        else
+        {
+            this->loadAvatar(this->userName_.toLower(), account->avatar(),
+                             false, false);
+        }
+    }
+    this->ui_.block->hide();
+    this->ui_.ignoreHighlights->setVisible(!isMyself);
+    this->ui_.notesAdd->setEnabled(true);
+    this->updateNotes();
+
+    bool ignoresHighlights = false;
+    for (const auto &entry : getSettings()->blacklistedUsers.raw())
+    {
+        if (entry.getPattern().compare(this->userName_, Qt::CaseInsensitive) ==
+            0)
+        {
+            ignoresHighlights = true;
+            break;
+        }
+    }
+    this->ui_.ignoreHighlights->setChecked(ignoresHighlights);
+    this->ui_.ignoreHighlights->setEnabled(true);
+
+    const auto token = itzon::apiToken();
+    if (token.isEmpty())
+    {
+        this->ui_.followerCountLabel->setText(
+            TEXT_FOLLOWERS.arg(TEXT_UNAVAILABLE));
+        return;
+    }
+
+    this->ui_.followerCountLabel->setText(TEXT_FOLLOWERS.arg(TEXT_LOADING));
+    QUrl url(QStringLiteral("https://itzon.tv"));
+    url.setPath(QStringLiteral("/api/public/v1/channel/") + this->userName_);
+    NetworkRequest(url)
+        .header("Authorization", QByteArrayLiteral("Bearer ") + token)
+        .timeout(10000)
+        .caller(this)
+        .onSuccess([this, hack = std::weak_ptr<bool>(this->lifetimeHack_)](
+                       const NetworkResult &result) {
+            if (!hack.lock())
+            {
+                return;
+            }
+            const auto json = result.parseJson();
+            if (json["followers"].isDouble())
+            {
+                this->ui_.followerCountLabel->setText(TEXT_FOLLOWERS.arg(
+                    localizeNumbers(json["followers"].toInteger())));
+            }
+            else
+            {
+                this->ui_.followerCountLabel->setText(
+                    TEXT_FOLLOWERS.arg(TEXT_UNAVAILABLE));
+            }
+            if (json["live"].toBool() && json["viewers"].isDouble())
+            {
+                this->ui_.liveIndicator->setViewers(
+                    json["viewers"].toInteger());
+                this->ui_.liveIndicator->show();
+            }
+        })
+        .onError([this, hack = std::weak_ptr<bool>(this->lifetimeHack_)](
+                     const NetworkResult &) {
+            if (hack.lock())
+            {
+                this->ui_.followerCountLabel->setText(
+                    TEXT_FOLLOWERS.arg(TEXT_UNAVAILABLE));
+            }
+        })
+        .execute();
+}
+
 void UserInfoPopup::loadAvatar(const QString &userID, const QString &pictureURL,
-                               bool isKick)
+                               bool isKick, bool loadSevenTV)
 {
     auto filename =
         getApp()->getPaths().cacheDirectory() + "/" + hashUrl(pictureURL);
@@ -1309,7 +1516,7 @@ void UserInfoPopup::loadAvatar(const QString &userID, const QString &pictureURL,
     this->helixAvatarUrl_ = pictureURL;
     this->updateAvatarUrl();
 
-    if (getSettings()->displaySevenTVAnimatedProfile)
+    if (loadSevenTV && getSettings()->displaySevenTVAnimatedProfile)
     {
         this->loadSevenTVAvatar(userID, isKick);
     }
@@ -1720,8 +1927,67 @@ void UserInfoPopup::onKickProfilePictureClick(Qt::MouseButton button)
     }
 }
 
+void UserInfoPopup::onItzonProfilePictureClick(Qt::MouseButton button)
+{
+    assert(this->isItzon_);
+    const auto username = this->userName_.toLower();
+    const QUrl channelURL(QStringLiteral("https://itzon.tv/") + username);
+
+    if (button == Qt::LeftButton)
+    {
+        QDesktopServices::openUrl(channelURL);
+        return;
+    }
+    if (button != Qt::RightButton)
+    {
+        return;
+    }
+
+    auto *menu = new QMenu(this);
+    menu->setAttribute(Qt::WA_DeleteOnClose);
+    if (!this->avatarUrl_.isEmpty())
+    {
+        const auto avatarURL = this->avatarUrl_;
+        menu->addAction("Open avatar in browser", this, [avatarURL] {
+            QDesktopServices::openUrl(QUrl(avatarURL));
+        });
+        menu->addAction("Copy avatar link", this, [avatarURL] {
+            crossPlatformCopy(avatarURL);
+        });
+        menu->addSeparator();
+    }
+
+    menu->addAction("Open channel in a new popup window", this, [username] {
+        auto *app = getApp();
+        auto *split = app->getWindows()
+                          ->createWindow(WindowType::Popup, {.show = true})
+                          .getNotebook()
+                          .getOrAddSelectedPage()
+                          ->appendNewSplit(false);
+        split->setChannel(app->getItzonChatServer()->getOrCreate(username));
+    });
+    menu->addAction("Open channel in a new tab", this, [username] {
+        auto *app = getApp();
+        auto *container =
+            app->getWindows()->getMainWindow().getNotebook().addPage(true);
+        auto *split = new Split(container);
+        split->setChannel(app->getItzonChatServer()->getOrCreate(username));
+        container->insertSplit(split);
+    });
+    menu->addAction("Open channel in browser", this, [channelURL] {
+        QDesktopServices::openUrl(channelURL);
+    });
+    this->appendCommonProfileActions(menu);
+    menu->popup(QCursor::pos());
+    menu->raise();
+}
+
 QStringView UserInfoPopup::platformName() const
 {
+    if (this->isItzon_)
+    {
+        return u"itzon.tv";
+    }
     if (this->isKick_)
     {
         return u"Kick";

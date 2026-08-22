@@ -1004,6 +1004,7 @@ TEST_F(PluginTest, MessageElementFlag)
                          "ReplyButton=0x200000000,"
                          "Text=0x2,"
                          "Timestamp=0x8,"
+                         "UserAvatar=0x80,"
                          "Username=0x4";
 
     std::string got = (*lua)["out"];

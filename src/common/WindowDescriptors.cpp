@@ -211,6 +211,8 @@ IndirectChannel SplitDescriptor::decodeChannel() const
         case Channel::Type::Itzon:
             return getApp()->getItzonChatServer()->getOrCreate(
                 this->channelName_);
+        case Channel::Type::ItzonWhispers:
+            return getApp()->getItzonChatServer()->getWhispersChannel();
         case Channel::Type::Multi: {
             QVarLengthArray<MultiChannel::Spec, 4> specs;
             for (const auto &child : this->children)

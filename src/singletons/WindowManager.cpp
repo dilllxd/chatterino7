@@ -116,6 +116,7 @@ void WindowManager::showAccountSelectPopup(QPoint point,
                 provider = ProviderId::Kick;
                 break;
             case Channel::Type::Itzon:
+            case Channel::Type::ItzonWhispers:
                 provider = ProviderId::Itzon;
                 break;
             default:

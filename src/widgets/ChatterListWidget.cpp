@@ -7,6 +7,7 @@
 #include "Application.hpp"
 #include "controllers/accounts/AccountController.hpp"
 #include "controllers/hotkeys/HotkeyController.hpp"
+#include "providers/itzon/ItzonChannel.hpp"
 #include "providers/twitch/api/Helix.hpp"
 #include "providers/twitch/TwitchAccount.hpp"  // IWYU pragma: keep
 #include "providers/twitch/TwitchChannel.hpp"
@@ -151,78 +152,18 @@ ChatterListWidget::ChatterListWidget(const TwitchChannel *twitchChannel,
                                      QWidget *parent)
     : BaseWindow({}, parent)
 {
-    this->setWindowTitle("Chatter List - " + twitchChannel->getName());
     assert(twitchChannel != nullptr);
+    this->initialize(twitchChannel->getName());
 
-    this->setAttribute(Qt::WA_DeleteOnClose);
+    auto *chattersList = this->chattersList_;
+    auto *loadingLabel = this->loadingLabel_;
 
-    auto *dockVbox = new QVBoxLayout();
-    auto *searchBar = new QLineEdit(this);
-
-    auto *chattersList = new QListWidget();
-    auto *resultList = new QListWidget();
-
-    auto *loadingLabel = new QLabel("Loading...");
-    searchBar->setPlaceholderText("Search User...");
-
-    auto formatListItemText = [](const QString &text) {
-        auto *item = new QListWidgetItem();
-        item->setText(text);
-        item->setFont(
-            getApp()->getFonts()->getFont(FontStyle::ChatMedium, 1.0));
-        return item;
-    };
-
-    auto addLabel = [this, formatListItemText,
-                     chattersList](const QString &label) {
-        auto *formattedLabel = formatListItemText(label);
-        formattedLabel->setFlags(Qt::NoItemFlags);
-        formattedLabel->setForeground(this->theme->accent);
-        chattersList->addItem(formattedLabel);
-    };
-
-    auto addUserList = [=](const QStringList &users, QString label) {
-        if (users.isEmpty())
-        {
-            return;
-        }
-
-        addLabel(QString("%1 (%2)").arg(label, localizeNumbers(users.size())));
-
-        for (const auto &user : users)
-        {
-            chattersList->addItem(formatListItemText(user));
-        }
-        chattersList->addItem(new QListWidgetItem());
-    };
-
-    auto performListSearch = [=]() {
-        auto query = searchBar->text();
-        if (query.isEmpty())
-        {
-            resultList->hide();
-            chattersList->show();
-            return;
-        }
-
-        auto results = chattersList->findItems(query, Qt::MatchContains);
-        chattersList->hide();
-        resultList->clear();
-        for (auto &item : results)
-        {
-            if (!item->text().contains("("))
-            {
-                resultList->addItem(formatListItemText(item->text()));
-            }
-        }
-        resultList->show();
-    };
-
-    auto loadChatters = [=](auto modList, auto vipList, bool isBroadcaster) {
+    auto loadChatters = [=, this](auto modList, auto vipList,
+                                  bool isBroadcaster) {
         getHelix()->getChatters(
             twitchChannel->roomId(),
             getApp()->getAccounts()->twitch.getCurrent()->getUserId(), 50000,
-            [=](const auto &chatters) {
+            [=, this](const auto &chatters) {
                 auto broadcaster = twitchChannel->getName().toLower();
                 QStringList chatterList;
                 QStringList modChatters;
@@ -236,7 +177,7 @@ ChatterListWidget::ChatterListWidget(const TwitchChannel *twitchChannel,
                     if (!addedBroadcaster && chatter == broadcaster)
                     {
                         addedBroadcaster = true;
-                        addLabel("Broadcaster");
+                        this->addLabel("Broadcaster");
                         chattersList->addItem(broadcaster);
                         chattersList->addItem(new QListWidgetItem());
                         continue;
@@ -257,42 +198,35 @@ ChatterListWidget::ChatterListWidget(const TwitchChannel *twitchChannel,
                     chatterList.append(chatter);
                 }
 
-                modChatters.sort();
-                vipChatters.sort();
-                chatterList.sort();
-
                 if (isBroadcaster)
                 {
-                    addUserList(modChatters, QString("Moderators"));
-                    addUserList(vipChatters, QString("VIPs"));
+                    this->addUserList(std::move(modChatters), "Moderators");
+                    this->addUserList(std::move(vipChatters), "VIPs");
                 }
                 else
                 {
-                    addLabel("Moderators");
+                    this->addLabel("Moderators");
                     chattersList->addItem(
                         "Moderators cannot check who is a moderator");
                     chattersList->addItem(new QListWidgetItem());
 
-                    addLabel("VIPs");
+                    this->addLabel("VIPs");
                     chattersList->addItem(
                         "Moderators cannot check who is a VIP");
                     chattersList->addItem(new QListWidgetItem());
                 }
 
-                addUserList(chatterList, QString("Chatters"));
+                this->addUserList(std::move(chatterList), "Chatters");
 
                 loadingLabel->hide();
-                performListSearch();
+                this->performListSearch();
             },
-            [chattersList, formatListItemText](auto error,
-                                               const auto &message) {
+            [this](auto error, const auto &message) {
                 auto errorMessage = formatChattersError(error, message);
-                chattersList->addItem(formatListItemText(errorMessage));
+                this->chattersList_->addItem(
+                    this->formatListItem(errorMessage));
             });
     };
-
-    QObject::connect(searchBar, &QLineEdit::textEdited, this,
-                     performListSearch);
 
     // Only broadcaster can get vips, mods can get chatters
     if (twitchChannel->isBroadcaster())
@@ -300,7 +234,7 @@ ChatterListWidget::ChatterListWidget(const TwitchChannel *twitchChannel,
         // Add moderators
         getHelix()->getModerators(
             twitchChannel->roomId(), 1000,
-            [=](const auto &mods) {
+            [=, this](const auto &mods) {
                 QSet<QString> modList;
                 for (const auto &mod : mods)
                 {
@@ -310,7 +244,7 @@ ChatterListWidget::ChatterListWidget(const TwitchChannel *twitchChannel,
                 // Add vips
                 getHelix()->getChannelVIPs(
                     twitchChannel->roomId(),
-                    [=](const auto &vips) {
+                    [=, this](const auto &vips) {
                         QSet<QString> vipList;
                         for (const auto &vip : vips)
                         {
@@ -320,16 +254,16 @@ ChatterListWidget::ChatterListWidget(const TwitchChannel *twitchChannel,
                         // Add chatters
                         loadChatters(modList, vipList, true);
                     },
-                    [chattersList, formatListItemText](auto error,
-                                                       const auto &message) {
+                    [this](auto error, const auto &message) {
                         auto errorMessage = formatVIPListError(error, message);
-                        chattersList->addItem(formatListItemText(errorMessage));
+                        this->chattersList_->addItem(
+                            this->formatListItem(errorMessage));
                     });
             },
-            [chattersList, formatListItemText](auto error,
-                                               const auto &message) {
+            [this](auto error, const auto &message) {
                 auto errorMessage = formatModsError(error, message);
-                chattersList->addItem(formatListItemText(errorMessage));
+                this->chattersList_->addItem(
+                    this->formatListItem(errorMessage));
             });
     }
     else if (twitchChannel->hasModRights())
@@ -341,13 +275,86 @@ ChatterListWidget::ChatterListWidget(const TwitchChannel *twitchChannel,
     else
     {
         chattersList->addItem(
-            formatListItemText("Due to Twitch restrictions, this feature is "
-                               "only \navailable for moderators."));
-        chattersList->addItem(
-            formatListItemText("If you would like to see the Chatter list, you "
-                               "must \nuse the Twitch website."));
+            this->formatListItem("Due to Twitch restrictions, this feature is "
+                                 "only \navailable for moderators."));
+        chattersList->addItem(this->formatListItem(
+            "If you would like to see the Chatter list, you "
+            "must \nuse the Twitch website."));
         loadingLabel->hide();
     }
+}
+
+ChatterListWidget::ChatterListWidget(const ItzonChannel *itzonChannel,
+                                     QWidget *parent)
+    : BaseWindow({}, parent)
+{
+    assert(itzonChannel != nullptr);
+    this->initialize(itzonChannel->getName());
+
+    QStringList broadcaster;
+    QStringList staff;
+    QStringList bots;
+    QStringList moderators;
+    QStringList vips;
+    QStringList chatters;
+    const auto &metadata = itzonChannel->chatUsers();
+    for (const auto &[lowerName, displayName] :
+         itzonChannel->accessChatters()->all())
+    {
+        const auto name = displayName.isEmpty() ? lowerName : displayName;
+        const auto user = metadata.value(lowerName);
+        if (user.owner || lowerName.compare(itzonChannel->getName(),
+                                            Qt::CaseInsensitive) == 0)
+        {
+            broadcaster.append(name);
+        }
+        else if (user.staff)
+        {
+            staff.append(name);
+        }
+        else if (user.bot)
+        {
+            bots.append(name);
+        }
+        else if (user.moderator)
+        {
+            moderators.append(name);
+        }
+        else if (user.vip)
+        {
+            vips.append(name);
+        }
+        else
+        {
+            chatters.append(name);
+        }
+    }
+
+    this->addUserList(std::move(broadcaster), "Broadcaster");
+    this->addUserList(std::move(staff), "Staff");
+    this->addUserList(std::move(bots), "Bots");
+    this->addUserList(std::move(moderators), "Moderators");
+    this->addUserList(std::move(vips), "VIPs");
+    this->addUserList(std::move(chatters), "Chatters");
+    this->loadingLabel_->hide();
+    this->performListSearch();
+}
+
+void ChatterListWidget::initialize(const QString &channelName)
+{
+    this->setWindowTitle("Chatter List - " + channelName);
+    this->setAttribute(Qt::WA_DeleteOnClose);
+
+    auto *dockVbox = new QVBoxLayout();
+    this->searchBar_ = new QLineEdit(this);
+    this->chattersList_ = new QListWidget();
+    this->resultList_ = new QListWidget();
+    this->loadingLabel_ = new QLabel("Loading...");
+    this->searchBar_->setPlaceholderText("Search User...");
+
+    QObject::connect(this->searchBar_, &QLineEdit::textEdited, this, [this] {
+        this->performListSearch();
+    });
 
     this->setMinimumWidth(300);
 
@@ -360,10 +367,10 @@ ChatterListWidget::ChatterListWidget(const TwitchChannel *twitchChannel,
         }
     };
 
-    QObject::connect(chattersList, &QListWidget::doubleClicked, this,
+    QObject::connect(this->chattersList_, &QListWidget::doubleClicked, this,
                      listDoubleClick);
 
-    QObject::connect(resultList, &QListWidget::doubleClicked, this,
+    QObject::connect(this->resultList_, &QListWidget::doubleClicked, this,
                      listDoubleClick);
 
     HotkeyController::HotkeyMap actions{
@@ -377,9 +384,9 @@ ChatterListWidget::ChatterListWidget(const TwitchChannel *twitchChannel,
         {"scrollPage", nullptr},
         {"openTab", nullptr},
         {"search",
-         [searchBar](const std::vector<QString> &) -> QString {
-             searchBar->setFocus();
-             searchBar->selectAll();
+         [this](const std::vector<QString> &) -> QString {
+             this->searchBar_->setFocus();
+             this->searchBar_->selectAll();
              return "";
          }},
     };
@@ -387,14 +394,69 @@ ChatterListWidget::ChatterListWidget(const TwitchChannel *twitchChannel,
     getApp()->getHotkeys()->shortcutsForCategory(HotkeyCategory::PopupWindow,
                                                  actions, this);
 
-    dockVbox->addWidget(searchBar);
-    dockVbox->addWidget(loadingLabel);
-    dockVbox->addWidget(chattersList);
-    dockVbox->addWidget(resultList);
-    resultList->hide();
+    dockVbox->addWidget(this->searchBar_);
+    dockVbox->addWidget(this->loadingLabel_);
+    dockVbox->addWidget(this->chattersList_);
+    dockVbox->addWidget(this->resultList_);
+    this->resultList_->hide();
 
     this->setStyleSheet(this->theme->splits.input.styleSheet);
     this->setLayout(dockVbox);
+}
+
+QListWidgetItem *ChatterListWidget::formatListItem(const QString &text) const
+{
+    auto *item = new QListWidgetItem(text);
+    item->setFont(getApp()->getFonts()->getFont(FontStyle::ChatMedium, 1.0));
+    return item;
+}
+
+void ChatterListWidget::addLabel(const QString &label)
+{
+    auto *item = this->formatListItem(label);
+    item->setFlags(Qt::NoItemFlags);
+    item->setForeground(this->theme->accent);
+    this->chattersList_->addItem(item);
+}
+
+void ChatterListWidget::addUserList(QStringList users, const QString &label)
+{
+    if (users.isEmpty())
+    {
+        return;
+    }
+    users.sort(Qt::CaseInsensitive);
+    this->addLabel(
+        QString("%1 (%2)").arg(label, localizeNumbers(users.size())));
+    for (const auto &user : users)
+    {
+        this->chattersList_->addItem(this->formatListItem(user));
+    }
+    this->chattersList_->addItem(new QListWidgetItem());
+}
+
+void ChatterListWidget::performListSearch()
+{
+    const auto query = this->searchBar_->text();
+    if (query.isEmpty())
+    {
+        this->resultList_->hide();
+        this->chattersList_->show();
+        return;
+    }
+
+    const auto results =
+        this->chattersList_->findItems(query, Qt::MatchContains);
+    this->chattersList_->hide();
+    this->resultList_->clear();
+    for (const auto *item : results)
+    {
+        if (item->flags() != Qt::NoItemFlags && !item->text().isEmpty())
+        {
+            this->resultList_->addItem(this->formatListItem(item->text()));
+        }
+    }
+    this->resultList_->show();
 }
 
 }  // namespace chatterino

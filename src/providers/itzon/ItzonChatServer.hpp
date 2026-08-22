@@ -33,7 +33,9 @@ public:
 
     void initialize();
     std::shared_ptr<Channel> getOrCreate(const QString &name);
+    const std::shared_ptr<Channel> &getWhispersChannel() const;
     bool canSend() const;
+    void reconnectCurrent();
     void sendMessage(const QString &channelName, const QString &message);
     void sendReply(const QString &channelName, const QString &message,
                    const QString &replyToID);
@@ -77,6 +79,7 @@ private:
 
     QHash<QString, std::shared_ptr<Client>> clients_;
     QHash<QString, std::weak_ptr<ItzonChannel>> channels_;
+    std::shared_ptr<Channel> whispersChannel_;
     QSet<QString> seenMessages_;
     QQueue<QString> seenMessageOrder_;
     pajlada::Signals::SignalHolder signalHolder_;

@@ -7,6 +7,8 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
+
 using namespace chatterino;
 
 TEST(ItzonChatIdentity, ParsesNamesPrefixes)
@@ -90,4 +92,31 @@ TEST(ItzonChatIdentity, UsesOfficialBadgeAssetsAndCategories)
     auto [unknown, unknownFlag] = ItzonBadges::role(QStringLiteral("unknown"));
     EXPECT_FALSE(unknown);
     EXPECT_EQ(unknownFlag, MessageElementFlag::None);
+}
+
+TEST(ItzonChatIdentity, UsesOfficialCosmeticBadgeNames)
+{
+    static constexpr std::array BADGES{
+        std::pair{"regular", "Regular"},
+        std::pair{"baron", "Baron"},
+        std::pair{"king", "King"},
+        std::pair{"founder", "Founder"},
+        std::pair{"streak_30", "Every Day"},
+        std::pair{"streak_365", "Full Orbit"},
+        std::pair{"medal", "Medal"},
+        std::pair{"twentyfour", "Twenty-Four"},
+    };
+
+    for (const auto &[assetName, title] : BADGES)
+    {
+        const auto [badge, flag] =
+            ItzonBadges::subscriber(QString::fromUtf8(assetName));
+        ASSERT_TRUE(badge);
+        EXPECT_EQ(flag, MessageElementFlag::BadgeSubscription);
+        EXPECT_EQ(badge->name.string, QString::fromUtf8(title));
+        EXPECT_EQ(badge->images.getImage1()->url().string,
+                  QStringLiteral("https://itzon.tv/static/img/badge-") +
+                      QString::fromUtf8(assetName).replace('_', '-') +
+                      QStringLiteral(".svg"));
+    }
 }

@@ -91,7 +91,9 @@ private:
         QLabel *automodLabel;
 
         QLineEdit *kickName;
+        detail::AutoCheckedRadioButton *itzonChannel;
         QLineEdit *itzonName;
+        detail::AutoCheckedRadioButton *itzonWhispers;
 
         QListWidget *multiView;
         QComboBox *multiIndicatorMode;

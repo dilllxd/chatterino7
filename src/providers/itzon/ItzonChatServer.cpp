@@ -13,6 +13,7 @@
 #include "providers/itzon/ItzonChannel.hpp"
 #include "providers/itzon/ItzonWebSocketProtocol.hpp"
 #include "singletons/Settings.hpp"
+#include "singletons/StreamerMode.hpp"
 
 #include <IrcMessage>
 #include <IrcNetwork>
@@ -95,7 +96,11 @@ void applyChatUserTags(ItzonChannel &channel, const QString &name,
 
 }  // namespace
 
-ItzonChatServer::ItzonChatServer() = default;
+ItzonChatServer::ItzonChatServer()
+    : whispersChannel_(std::make_shared<Channel>(QStringLiteral("/whispers"),
+                                                 Channel::Type::ItzonWhispers))
+{
+}
 ItzonChatServer::~ItzonChatServer() = default;
 
 void ItzonChatServer::initialize()
@@ -622,6 +627,45 @@ void ItzonChatServer::handlePrivateMessage(
         return;
     }
 
+    if (!message->target().startsWith('#'))
+    {
+        const bool sent = message->nick().compare(client->account->username(),
+                                                  Qt::CaseInsensitive) == 0;
+        auto [built, alert] = MessageBuilder::makeIrcMessage(
+            this->whispersChannel_.get(), message,
+            MessageParseArgs{
+                .isReceivedWhisper = !sent,
+                .isSentWhisper = sent,
+                .isAction = message->isAction(),
+            },
+            message->content(), 0);
+        if (!built)
+        {
+            return;
+        }
+        built->flags.set(MessageFlag::Whisper);
+        MessageBuilder::triggerHighlights(this->whispersChannel_.get(), alert);
+        this->whispersChannel_->addMessage(built, MessageContext::Original);
+
+        auto repostFlags = std::optional<MessageFlags>(built->flags);
+        repostFlags->set(MessageFlag::DoNotTriggerNotification);
+        repostFlags->set(MessageFlag::DoNotLog);
+        if (getSettings()->inlineWhispers &&
+            !(getSettings()->streamerModeSuppressInlineWhispers &&
+              getApp()->getStreamerMode()->isEnabled()))
+        {
+            for (const auto &weak : this->channels_)
+            {
+                if (auto channel = weak.lock())
+                {
+                    channel->addMessage(built, MessageContext::Repost,
+                                        repostFlags);
+                }
+            }
+        }
+        return;
+    }
+
     auto channelName = cleanChannelName(message->target());
     auto channel = this->channels_.value(channelName).lock();
     if (!channel)
@@ -848,6 +892,10 @@ std::shared_ptr<Channel> ItzonChatServer::getOrCreate(const QString &name)
     {
         return Channel::getEmpty();
     }
+    if (clean == QStringLiteral("/whispers"))
+    {
+        return this->whispersChannel_;
+    }
     if (auto existing = this->channels_.value(clean).lock())
     {
         return existing;
@@ -870,6 +918,11 @@ std::shared_ptr<Channel> ItzonChatServer::getOrCreate(const QString &name)
     return channel;
 }
 
+const std::shared_ptr<Channel> &ItzonChatServer::getWhispersChannel() const
+{
+    return this->whispersChannel_;
+}
+
 std::shared_ptr<ItzonChatServer::Client> ItzonChatServer::currentClient() const
 {
     auto account = getApp()->getAccounts()->itzon.current();
@@ -884,6 +937,31 @@ bool ItzonChatServer::canSend() const
 {
     auto client = this->currentClient();
     return client && client->authenticated && client->connection->isConnected();
+}
+
+void ItzonChatServer::reconnectCurrent()
+{
+    auto client = this->currentClient();
+    if (!client)
+    {
+        return;
+    }
+
+    client->reconnectEnabled = false;
+    client->authenticated = false;
+    client->connection->close();
+    client->joinedChannels.clear();
+    client->pendingJoinChannels.clear();
+    client->pendingPartChannels.clear();
+    client->waitingForEmotesChannels.clear();
+    client->pendingNames.clear();
+    client->reconnectEnabled = true;
+    QTimer::singleShot(0, this, [client] {
+        if (client->reconnectEnabled)
+        {
+            client->connection->open();
+        }
+    });
 }
 
 void ItzonChatServer::sendMessage(const QString &channelName,

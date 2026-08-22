@@ -57,15 +57,19 @@ OAuthSession createOAuthSession()
 }
 
 QUrl authorizationUrl(const QString &clientID, const QUrl &redirectURI,
-                      const OAuthSession &session)
+                      const OAuthSession &session, bool requestApiWrite)
 {
     QUrl url(QStringLiteral("https://itzon.tv/oauth/authorize"));
     QUrlQuery query;
     query.addQueryItem(QStringLiteral("client_id"), clientID);
     query.addQueryItem(QStringLiteral("redirect_uri"), redirectURI.toString());
     query.addQueryItem(QStringLiteral("response_type"), QStringLiteral("code"));
-    query.addQueryItem(QStringLiteral("scope"),
-                       QStringLiteral("identity chat api:read"));
+    auto scope = QStringLiteral("identity chat api:read");
+    if (requestApiWrite)
+    {
+        scope += QStringLiteral(" api:write");
+    }
+    query.addQueryItem(QStringLiteral("scope"), scope);
     query.addQueryItem(QStringLiteral("state"),
                        QString::fromLatin1(session.state));
     query.addQueryItem(QStringLiteral("code_challenge"),

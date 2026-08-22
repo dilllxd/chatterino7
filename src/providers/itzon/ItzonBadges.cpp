@@ -66,9 +66,16 @@ QString subscriberTitle(const QString &name)
 {
     static const QHash<QString, QString> TITLES{
         {u"regular"_s, u"Regular"_s},
+        {u"baron"_s, u"Baron"_s},
+        {u"king"_s, u"King"_s},
+        {u"founder"_s, u"Founder"_s},
         {u"ambassador"_s, u"Ambassador - one of the first"_s},
         {u"bounty"_s, u"Bug bounty - found a critical bug"_s},
         {u"invite"_s, u"Recruiter - invited a friend"_s},
+        {u"streak_30"_s, u"Every Day"_s},
+        {u"streak_365"_s, u"Full Orbit"_s},
+        {u"medal"_s, u"Medal"_s},
+        {u"twentyfour"_s, u"Twenty-Four"_s},
         {u"lucky"_s, u"Lucky - one in a million"_s},
         {u"partner"_s, u"Partner"_s},
     };

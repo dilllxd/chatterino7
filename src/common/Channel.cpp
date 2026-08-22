@@ -111,7 +111,7 @@ bool Channel::isKickChannel() const
 
 bool Channel::isItzonChannel() const
 {
-    return this->type_ == Type::Itzon;
+    return this->type_ == Type::Itzon || this->type_ == Type::ItzonWhispers;
 }
 
 bool Channel::isTwitchOrKickChannel() const
@@ -546,7 +546,8 @@ bool Channel::shouldIgnoreHighlights() const
 {
     return this->type_ == Type::TwitchAutomod ||
            this->type_ == Type::TwitchMentions ||
-           this->type_ == Type::TwitchWhispers;
+           this->type_ == Type::TwitchWhispers ||
+           this->type_ == Type::ItzonWhispers;
 }
 
 bool Channel::canReconnect() const

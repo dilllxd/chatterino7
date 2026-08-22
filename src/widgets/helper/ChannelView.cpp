@@ -2585,6 +2585,11 @@ void ChannelView::mouseReleaseEvent(QMouseEvent *event)
                         QDesktopServices::openUrl(
                             QUrl(u"https://www.twitch.tv/" % userName));
                         break;
+                    case Channel::Type::Itzon:
+                    case Channel::Type::ItzonWhispers:
+                        QDesktopServices::openUrl(
+                            QUrl(u"https://itzon.tv/" % userName));
+                        break;
                     case Channel::Type::TwitchMentions:
                         openTwitchUsercard(layout->getMessage()->channelName,
                                            userName);
@@ -2984,6 +2989,10 @@ void ChannelView::addMessageContextMenuItems(QMenu *menu,
                 {
                     kc->deleteMessage(id);
                 }
+                else if (dynamic_cast<ItzonChannel *>(chan.get()))
+                {
+                    chan->sendMessage(QStringLiteral(".delete ") + id);
+                }
             });
 
         auto *twitchChannel = dynamic_cast<TwitchChannel *>(chan.get());
@@ -3013,6 +3022,17 @@ void ChannelView::addMessageContextMenuItems(QMenu *menu,
                 "&Unpin", this, [twitchChannel, id = layout->getMessage()->id] {
                     twitchChannel->unpinMessageAs(
                         id, *getApp()->getAccounts()->twitch.getCurrent());
+                });
+        }
+        else if (dynamic_cast<ItzonChannel *>(chan.get()))
+        {
+            moderateMenu->addAction(
+                "&Pin", this, [chan, id = layout->getMessage()->id] {
+                    chan->sendMessage(QStringLiteral(".pin ") + id);
+                });
+            moderateMenu->addAction(
+                "&Unpin", this, [chan, id = layout->getMessage()->id] {
+                    chan->sendMessage(QStringLiteral(".unpin ") + id);
                 });
         }
     }
@@ -3317,6 +3337,7 @@ bool ChannelView::mayContainMessage(const MessagePtr &message)
             return message->flags.has(MessageFlag::System) ||
                    this->channel()->getName() == message->channelName;
         case Channel::Type::TwitchWhispers:
+        case Channel::Type::ItzonWhispers:
             return message->flags.has(MessageFlag::Whisper);
         case Channel::Type::TwitchMentions:
             return message->flags.has(MessageFlag::Highlighted);
@@ -3682,6 +3703,7 @@ bool ChannelView::canReplyToMessages() const
     }
 
     if (chan->getType() == Channel::Type::TwitchWhispers ||
+        chan->getType() == Channel::Type::ItzonWhispers ||
         chan->getType() == Channel::Type::TwitchLive)
     {
         return false;
