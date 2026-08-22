@@ -2,8 +2,8 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "Chatterino7 + itzon.tv"
-#define MyAppVersion "2.5.6-beta.3"
-#define MyAppVersionInfo "2.5.6.3"
+#define MyAppVersion "2.5.6-beta.4"
+#define MyAppVersionInfo "2.5.6.4"
 #define MyAppPublisher "dilllxd"
 #define MyAppURL "https://github.com/dilllxd/chatterino7"
 #define MyAppExeName "chatterino.exe"
