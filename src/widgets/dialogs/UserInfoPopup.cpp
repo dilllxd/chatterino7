@@ -982,6 +982,40 @@ void UserInfoPopup::setData(const QString &name,
     }
     else if (this->isItzon_)
     {
+        if (auto *channel =
+                dynamic_cast<ItzonChannel *>(this->underlyingChannel_.get()))
+        {
+            this->itzonChatUserConnection_ =
+                std::make_unique<pajlada::Signals::ScopedConnection>(
+                    channel->chatUserChanged.connect(
+                        [this](const QString &name) {
+                            if (!name.isEmpty() &&
+                                name.compare(this->userName_,
+                                             Qt::CaseInsensitive) != 0)
+                            {
+                                return;
+                            }
+                            QMetaObject::invokeMethod(
+                                this,
+                                [this] {
+                                    this->updateItzonUserData();
+                                },
+                                Qt::QueuedConnection);
+                        }));
+        }
+        if (const auto account = getApp()->getAccounts()->itzon.current())
+        {
+            this->itzonAuthConnection_ =
+                std::make_unique<pajlada::Signals::ScopedConnection>(
+                    account->authUpdated.connect([this] {
+                        QMetaObject::invokeMethod(
+                            this,
+                            [this] {
+                                this->updateItzonUserData();
+                            },
+                            Qt::QueuedConnection);
+                    }));
+        }
         this->updateItzonUserData();
     }
     else
@@ -1309,7 +1343,15 @@ void UserInfoPopup::updateItzonUserData()
         dynamic_cast<ItzonChannel *>(this->underlyingChannel_.get());
     const auto user = channel ? channel->chatUser(this->userName_)
                               : std::optional<ItzonChannel::ChatUser>{};
-    const auto rawUserID = user ? user->userID : QString{};
+    const auto account = getApp()->getAccounts()->itzon.current();
+    const bool isMyself =
+        account &&
+        account->username().compare(this->userName_, Qt::CaseInsensitive) == 0;
+    auto rawUserID = user ? user->userID : QString{};
+    if (rawUserID.isEmpty() && isMyself)
+    {
+        rawUserID = account->userID();
+    }
     this->userId_ =
         QStringLiteral("itzon:") +
         (rawUserID.isEmpty() ? this->userName_.toLower() : rawUserID);
@@ -1386,10 +1428,6 @@ void UserInfoPopup::updateItzonUserData()
     }
     this->ui_.subageLabel->setText(roles.join(QStringLiteral(" · ")));
 
-    const auto account = getApp()->getAccounts()->itzon.current();
-    const bool isMyself =
-        account &&
-        account->username().compare(this->userName_, Qt::CaseInsensitive) == 0;
     if (!loadedAvatar && isMyself && !account->avatar().isEmpty())
     {
         if (getApp()->getStreamerMode()->isEnabled() &&

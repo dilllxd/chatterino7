@@ -28,6 +28,8 @@
 namespace chatterino {
 namespace {
 
+const QString GUEST_CLIENT_KEY = QStringLiteral("\x01guest");
+
 QString cleanChannelName(QString name)
 {
     name = name.trimmed().toLower();
@@ -106,6 +108,7 @@ ItzonChatServer::~ItzonChatServer() = default;
 void ItzonChatServer::initialize()
 {
     auto &manager = getApp()->getAccounts()->itzon;
+    this->addGuestClient();
     for (const auto &account : manager.accounts.raw())
     {
         this->addClient(account);
@@ -137,6 +140,17 @@ void ItzonChatServer::initialize()
         reloadSeventvEmotes, this->signalHolder_, false);
 }
 
+void ItzonChatServer::addGuestClient()
+{
+    auto client = std::make_shared<Client>();
+    client->configuredUsername = QStringLiteral("chatterino");
+    client->connection = std::make_unique<IrcConnection>();
+    client->outgoing =
+        std::make_unique<RatelimitBucket>(1, 550, [](QString) {}, this);
+    this->clients_.insert(GUEST_CLIENT_KEY, client);
+    this->configureClient(client);
+}
+
 void ItzonChatServer::addClient(const std::shared_ptr<ItzonAccount> &account)
 {
     auto key = account->username().toLower();
@@ -146,6 +160,7 @@ void ItzonChatServer::addClient(const std::shared_ptr<ItzonAccount> &account)
     }
     auto client = std::make_shared<Client>();
     client->account = account;
+    client->configuredUsername = account->username();
     client->connection = std::make_unique<IrcConnection>();
     std::weak_ptr<Client> weakClient = client;
     client->outgoing = std::make_unique<RatelimitBucket>(
@@ -235,10 +250,11 @@ void ItzonChatServer::configureClient(const std::shared_ptr<Client> &client)
         socket->setPeerVerifyMode(QSslSocket::VerifyPeer);
     }
     connection->setProtocol(new ItzonWebSocketProtocol(connection));
-    connection->setUserName(client->account->username());
-    connection->setNickName(client->account->username());
-    connection->setRealName(client->account->username());
-    connection->setPassword(client->account->token());
+    connection->setUserName(client->configuredUsername);
+    connection->setNickName(client->configuredUsername);
+    connection->setRealName(client->configuredUsername);
+    connection->setPassword(client->account ? client->account->token()
+                                            : QString{});
 
     QObject::connect(connection, &Communi::IrcConnection::messageReceived, this,
                      [this, weakClient](Communi::IrcMessage *message) {
@@ -253,6 +269,13 @@ void ItzonChatServer::configureClient(const std::shared_ptr<Client> &client)
                          if (auto client = weakClient.lock())
                          {
                              this->handlePrivateMessage(client, message);
+                         }
+                     });
+    QObject::connect(connection, &Communi::IrcConnection::connected, this,
+                     [this, weakClient] {
+                         if (auto client = weakClient.lock())
+                         {
+                             this->syncClientChannels(client);
                          }
                      });
     this->signalHolder_.managedConnect(
@@ -271,10 +294,8 @@ void ItzonChatServer::configureClient(const std::shared_ptr<Client> &client)
             client->waitingForEmotesChannels.clear();
             client->pendingNames.clear();
 
-            auto current = getApp()->getAccounts()->itzon.current();
-            if (client->reconnectEnabled && wasAuthenticated && current &&
-                current->username().compare(client->account->username(),
-                                            Qt::CaseInsensitive) == 0)
+            if (client->reconnectEnabled && wasAuthenticated &&
+                this->isCurrentClient(client))
             {
                 MessageBuilder builder(
                     systemMessage,
@@ -308,8 +329,8 @@ void ItzonChatServer::handleMessage(const std::shared_ptr<Client> &client,
     if (command == "001")
     {
         auto assigned = message->parameter(0);
-        if (assigned.compare(client->account->username(),
-                             Qt::CaseInsensitive) != 0)
+        if (client->account && assigned.compare(client->configuredUsername,
+                                                Qt::CaseInsensitive) != 0)
         {
             for (const auto &weak : this->channels_)
             {
@@ -326,6 +347,7 @@ void ItzonChatServer::handleMessage(const std::shared_ptr<Client> &client,
             client->connection->close();
             return;
         }
+        client->assignedUsername = assigned;
         client->authenticated = true;
         this->syncClientChannels(client);
         return;
@@ -334,9 +356,8 @@ void ItzonChatServer::handleMessage(const std::shared_ptr<Client> &client,
     if (command == "JOIN")
     {
         const auto channelName = cleanChannelName(message->parameter(0));
-        const bool ownJoin =
-            message->nick().compare(client->account->username(),
-                                    Qt::CaseInsensitive) == 0;
+        const bool ownJoin = message->nick().compare(client->username(),
+                                                     Qt::CaseInsensitive) == 0;
         const bool currentClient = this->isCurrentClient(client);
         if (ownJoin)
         {
@@ -346,12 +367,13 @@ void ItzonChatServer::handleMessage(const std::shared_ptr<Client> &client,
             client->joinedChannels.insert(channelName);
             client->everJoinedChannels.insert(channelName);
             qCDebug(chatterinoIrc)
-                << "itzon.tv account" << client->account->username()
+                << "itzon.tv account" << client->username()
                 << (rejoined ? "rejoined" : "joined") << channelName;
             if (auto channel = this->channels_.value(channelName).lock();
                 currentClient && channel)
             {
                 channel->clearChatUsers();
+                channel->clearPinnedMessages();
                 channel->setMod(false);
                 channel->setVip(false);
                 channel->addSystemMessage(rejoined ? "rejoined channel"
@@ -387,9 +409,8 @@ void ItzonChatServer::handleMessage(const std::shared_ptr<Client> &client,
     if (command == "PART")
     {
         const auto channelName = cleanChannelName(message->parameter(0));
-        const bool ownPart =
-            message->nick().compare(client->account->username(),
-                                    Qt::CaseInsensitive) == 0;
+        const bool ownPart = message->nick().compare(client->username(),
+                                                     Qt::CaseInsensitive) == 0;
         const bool currentClient = this->isCurrentClient(client);
         if (ownPart)
         {
@@ -452,8 +473,8 @@ void ItzonChatServer::handleMessage(const std::shared_ptr<Client> &client,
                     }
                     channel->setChatUser(name, user);
                 }
-                if (currentClient && name.compare(client->account->username(),
-                                                  Qt::CaseInsensitive) == 0)
+                if (currentClient &&
+                    name.compare(client->username(), Qt::CaseInsensitive) == 0)
                 {
                     if (auto channel =
                             this->channels_.value(channelName).lock())
@@ -489,8 +510,7 @@ void ItzonChatServer::handleMessage(const std::shared_ptr<Client> &client,
             channel->setChatUser(target, std::move(user));
         }
         if (this->isCurrentClient(client) &&
-            target.compare(client->account->username(), Qt::CaseInsensitive) ==
-                0)
+            target.compare(client->username(), Qt::CaseInsensitive) == 0)
         {
             if (auto channel = this->channels_.value(channelName).lock())
             {
@@ -519,9 +539,7 @@ void ItzonChatServer::handleMessage(const std::shared_ptr<Client> &client,
             return;
         }
         const auto channelName = cleanChannelName(*channelIt);
-        auto current = getApp()->getAccounts()->itzon.current();
-        if (current && current->username().compare(client->account->username(),
-                                                   Qt::CaseInsensitive) == 0)
+        if (this->isCurrentClient(client))
         {
             if (auto channel = this->channels_.value(channelName).lock())
             {
@@ -567,6 +585,17 @@ void ItzonChatServer::handleMessage(const std::shared_ptr<Client> &client,
         this->addClientSystemMessage(
             client, {},
             QStringLiteral("itzon.tv connection error: %1").arg(detail));
+        if (detail.contains(QStringLiteral("4403")))
+        {
+            client->reconnectEnabled = false;
+            this->addClientSystemMessage(
+                client, {},
+                client->account
+                    ? QStringLiteral(
+                          "The selected itzon.tv credential was revoked. Sign "
+                          "in again or update its chat bot token.")
+                    : QStringLiteral("itzon.tv revoked the guest connection."));
+        }
         return;
     }
 
@@ -602,7 +631,52 @@ void ItzonChatServer::handleMessage(const std::shared_ptr<Client> &client,
         this->addClientSystemMessage(
             client, {},
             QStringLiteral("itzon.tv authentication failed for %1 - %2")
-                .arg(client->account->username(), detail));
+                .arg(client->configuredUsername, detail));
+        return;
+    }
+
+    if (command == "PIN")
+    {
+        const auto parameters = message->parameters();
+        if (parameters.size() < 4)
+        {
+            return;
+        }
+        const auto channelName = cleanChannelName(parameters[0]);
+        if (auto channel = this->channels_.value(channelName).lock();
+            this->isCurrentClient(client) && channel)
+        {
+            const auto messageID = parameters[1];
+            QDateTime sentAt;
+            if (const auto original = channel->findMessageByID(messageID))
+            {
+                sentAt = original->serverReceivedTime;
+            }
+            channel->setPinnedMessage({
+                .messageID = messageID,
+                .sender = parameters[2],
+                .pinnedBy = message->nick() == QStringLiteral("go-irc")
+                                ? QString{}
+                                : message->nick(),
+                .messageText = parameters.mid(3).join(' '),
+                .sentAt = sentAt,
+            });
+        }
+        return;
+    }
+
+    if (command == "UNPIN")
+    {
+        if (message->parameters().size() < 2)
+        {
+            return;
+        }
+        const auto channelName = cleanChannelName(message->parameter(0));
+        if (auto channel = this->channels_.value(channelName).lock();
+            this->isCurrentClient(client) && channel)
+        {
+            channel->removePinnedMessage(message->parameter(1));
+        }
         return;
     }
 
@@ -629,7 +703,7 @@ void ItzonChatServer::handlePrivateMessage(
 
     if (!message->target().startsWith('#'))
     {
-        const bool sent = message->nick().compare(client->account->username(),
+        const bool sent = message->nick().compare(client->username(),
                                                   Qt::CaseInsensitive) == 0;
         auto [built, alert] = MessageBuilder::makeIrcMessage(
             this->whispersChannel_.get(), message,
@@ -717,7 +791,7 @@ void ItzonChatServer::addClientSystemMessage(
     const auto formatted = currentClient
                                ? text
                                : QStringLiteral("itzon.tv account %1: %2")
-                                     .arg(client->account->username(), text);
+                                     .arg(client->username(), text);
 
     if (!channelName.isEmpty())
     {
@@ -756,8 +830,16 @@ bool ItzonChatServer::isCurrentClient(
     const std::shared_ptr<Client> &client) const
 {
     auto current = getApp()->getAccounts()->itzon.current();
-    return current && client &&
-           current->username().compare(client->account->username(),
+    if (!client)
+    {
+        return false;
+    }
+    if (!current)
+    {
+        return !client->account;
+    }
+    return client->account &&
+           current->username().compare(client->configuredUsername,
                                        Qt::CaseInsensitive) == 0;
 }
 
@@ -918,6 +1000,24 @@ std::shared_ptr<Channel> ItzonChatServer::getOrCreate(const QString &name)
     return channel;
 }
 
+std::shared_ptr<Channel> ItzonChatServer::findChannel(const QString &name) const
+{
+    const auto clean = cleanChannelName(name);
+    if (clean == QStringLiteral("/whispers"))
+    {
+        return this->whispersChannel_;
+    }
+    if (clean.isEmpty())
+    {
+        return Channel::getEmpty();
+    }
+    if (auto channel = this->channels_.value(clean).lock())
+    {
+        return channel;
+    }
+    return Channel::getEmpty();
+}
+
 const std::shared_ptr<Channel> &ItzonChatServer::getWhispersChannel() const
 {
     return this->whispersChannel_;
@@ -928,7 +1028,7 @@ std::shared_ptr<ItzonChatServer::Client> ItzonChatServer::currentClient() const
     auto account = getApp()->getAccounts()->itzon.current();
     if (!account)
     {
-        return {};
+        return this->clients_.value(GUEST_CLIENT_KEY);
     }
     return this->clients_.value(account->username().toLower());
 }
@@ -936,7 +1036,8 @@ std::shared_ptr<ItzonChatServer::Client> ItzonChatServer::currentClient() const
 bool ItzonChatServer::canSend() const
 {
     auto client = this->currentClient();
-    return client && client->authenticated && client->connection->isConnected();
+    return client && client->account && client->authenticated &&
+           client->connection->isConnected();
 }
 
 void ItzonChatServer::reconnectCurrent()
@@ -968,7 +1069,7 @@ void ItzonChatServer::sendMessage(const QString &channelName,
                                   const QString &message)
 {
     auto client = this->currentClient();
-    if (!client || !client->authenticated)
+    if (!client || !client->account || !client->authenticated)
     {
         return;
     }
@@ -981,7 +1082,7 @@ void ItzonChatServer::sendReply(const QString &channelName,
                                 const QString &replyToID)
 {
     auto client = this->currentClient();
-    if (!client || !client->authenticated)
+    if (!client || !client->account || !client->authenticated)
     {
         return;
     }

@@ -7,6 +7,7 @@
 #include "common/Channel.hpp"
 #include "controllers/commands/CommandContext.hpp"
 #include "messages/MessageBuilder.hpp"
+#include "providers/itzon/ItzonChannel.hpp"
 #include "providers/twitch/api/Helix.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 
@@ -58,6 +59,34 @@ QString getModerators(const CommandContext &ctx)
 {
     if (ctx.channel == nullptr)
     {
+        return "";
+    }
+
+    if (const auto *itzonChannel =
+            dynamic_cast<ItzonChannel *>(ctx.channel.get()))
+    {
+        QStringList moderators;
+        for (auto it = itzonChannel->chatUsers().cbegin();
+             it != itzonChannel->chatUsers().cend(); ++it)
+        {
+            if (it->moderator)
+            {
+                moderators.append(it.key());
+            }
+        }
+        if (moderators.isEmpty())
+        {
+            ctx.channel->addSystemMessage(
+                "This channel does not have any moderators.");
+        }
+        else
+        {
+            moderators.sort(Qt::CaseInsensitive);
+            ctx.channel->addMessage(MessageBuilder::makeListOfUsersMessage(
+                                        "The moderators of this channel are: ",
+                                        moderators, ctx.channel.get()),
+                                    MessageContext::Original);
+        }
         return "";
     }
 

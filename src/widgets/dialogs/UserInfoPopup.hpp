@@ -103,6 +103,9 @@ private:
     std::unique_ptr<pajlada::Signals::ScopedConnection> refreshConnection_;
     std::unique_ptr<pajlada::Signals::ScopedConnection>
         userDataUpdatedConnection_;
+    std::unique_ptr<pajlada::Signals::ScopedConnection>
+        itzonChatUserConnection_;
+    std::unique_ptr<pajlada::Signals::ScopedConnection> itzonAuthConnection_;
 
     // If we should close the dialog automatically if the user clicks out
     // Set based on the "Automatically close usercard when it loses focus" setting

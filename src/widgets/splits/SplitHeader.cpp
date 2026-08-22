@@ -580,6 +580,7 @@ void SplitHeader::initializeLayout()
 
     QObject::connect(this->pinButton_, &Button::leftClicked, this, [this]() {
         this->split_->togglePinnedBanner();
+        this->updatePinButton();
     });
 
     QObject::connect(this->addButton_, &Button::leftClicked, this, [this]() {
@@ -835,6 +836,12 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
                 this->split_, &Split::openChatterList);
         }
 
+        if (itzonChannel)
+        {
+            moreMenu->addAction("Show follower list", this->split_,
+                                &Split::openFollowerList);
+        }
+
         if (twitchChannel)
         {
             moreMenu->addAction("Subscribe",
@@ -1069,7 +1076,7 @@ void SplitHeader::handleChannelChanged()
             channel = active->channel;
         }
     }
-    else if (auto *kickChannel = dynamic_cast<KickChannel *>(channel.get()))
+    if (auto *kickChannel = dynamic_cast<KickChannel *>(channel.get()))
     {
         this->channelConnections_.managedConnect(kickChannel->streamDataChanged,
                                                  [this]() {
@@ -1086,6 +1093,12 @@ void SplitHeader::handleChannelChanged()
                                                  [this]() {
                                                      this->updateIcons();
                                                  });
+        this->channelConnections_.managedConnect(
+            itzonChannel->pinnedMessageChanged, [this]() {
+                QTimer::singleShot(0, this, [this] {
+                    this->updatePinButton();
+                });
+            });
     }
 
     if (auto *twitchChannel = dynamic_cast<TwitchChannel *>(channel.get()))
@@ -1136,8 +1149,10 @@ void SplitHeader::updatePinButton()
 {
     auto channel = this->split_->getSelectedChannel();
     auto *twitchChannel = dynamic_cast<TwitchChannel *>(channel.get());
-    const bool hasPinnedMessage = twitchChannel != nullptr &&
-                                  twitchChannel->getPinnedMessage() != nullptr;
+    auto *itzonChannel = dynamic_cast<ItzonChannel *>(channel.get());
+    const bool hasPinnedMessage =
+        (twitchChannel && twitchChannel->getPinnedMessage()) ||
+        (itzonChannel && itzonChannel->getPinnedMessage());
 
     this->pinButton_->setVisible(hasPinnedMessage);
     if (hasPinnedMessage && this->split_->getPinnedBanner()->isVisible())

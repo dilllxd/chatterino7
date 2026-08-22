@@ -18,6 +18,7 @@ class QMenu;
 
 namespace chatterino {
 
+class ItzonChannel;
 class TwitchChannel;
 class DrawnButton;
 
@@ -32,8 +33,9 @@ class PinnedMessageWidget final : public BaseWidget
 public:
     explicit PinnedMessageWidget(QWidget *parent = nullptr);
 
-    // Pass nullptr to detach from any channel.
     void setChannel(TwitchChannel *channel);
+    void setChannel(ItzonChannel *channel);
+    void detachChannel();
 
     // Called by the header pin button to toggle manual visibility.
     void toggleUserPinned();
@@ -65,6 +67,7 @@ private:
     void updateMessageHeightIfNeeded();
 
     TwitchChannel *channel_ = nullptr;
+    ItzonChannel *itzonChannel_ = nullptr;
     pajlada::Signals::SignalHolder signalHolder_;
 
     // Header row

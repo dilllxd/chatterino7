@@ -214,6 +214,7 @@ public Q_SLOTS:
     void setFiltersDialog();
     void showSearch(bool singleChannel);
     void openChatterList();
+    void openFollowerList();
     void openSubPage();
     void reconnect();
     void togglePinnedBanner();

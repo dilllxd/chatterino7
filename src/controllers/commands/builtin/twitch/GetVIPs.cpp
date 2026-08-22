@@ -8,6 +8,7 @@
 #include "controllers/accounts/AccountController.hpp"
 #include "controllers/commands/CommandContext.hpp"
 #include "messages/MessageBuilder.hpp"
+#include "providers/itzon/ItzonChannel.hpp"
 #include "providers/twitch/api/Helix.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
@@ -74,6 +75,34 @@ QString getVIPs(const CommandContext &ctx)
 {
     if (ctx.channel == nullptr)
     {
+        return "";
+    }
+
+    if (const auto *itzonChannel =
+            dynamic_cast<ItzonChannel *>(ctx.channel.get()))
+    {
+        QStringList vips;
+        for (auto it = itzonChannel->chatUsers().cbegin();
+             it != itzonChannel->chatUsers().cend(); ++it)
+        {
+            if (it->vip)
+            {
+                vips.append(it.key());
+            }
+        }
+        if (vips.isEmpty())
+        {
+            ctx.channel->addSystemMessage(
+                "This channel does not have any VIPs.");
+        }
+        else
+        {
+            vips.sort(Qt::CaseInsensitive);
+            ctx.channel->addMessage(
+                MessageBuilder::makeListOfUsersMessage(
+                    "The VIPs of this channel are: ", vips, ctx.channel.get()),
+                MessageContext::Original);
+        }
         return "";
     }
 

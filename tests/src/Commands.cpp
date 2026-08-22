@@ -8,11 +8,13 @@
 #include "controllers/commands/CommandContext.hpp"
 #include "controllers/commands/CommandController.hpp"
 #include "controllers/commands/common/ChannelAction.hpp"
+#include "messages/Message.hpp"
 #include "mocks/BaseApplication.hpp"
 #include "mocks/EmoteController.hpp"
 #include "mocks/Helix.hpp"
 #include "mocks/Logging.hpp"
 #include "mocks/TwitchIrcServer.hpp"
+#include "providers/itzon/ItzonChannel.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "singletons/Settings.hpp"
@@ -82,6 +84,39 @@ TEST(Commands, itzonServerCommandsUseDocumentedPrefix)
               ".pin message-id");
     EXPECT_EQ(app.commands.execCommand("/not-an-itzon-command", channel, false),
               "/not-an-itzon-command");
+}
+
+TEST(Commands, itzonLocalParityCommands)
+{
+    MockApplication app;
+    auto channel = std::make_shared<ItzonChannel>("channel");
+
+    ItzonChannel::ChatUser moderator;
+    moderator.moderator = true;
+    channel->setChatUser(QStringLiteral("mod-user"), moderator);
+    ItzonChannel::ChatUser vip;
+    vip.vip = true;
+    channel->setChatUser(QStringLiteral("vip-user"), vip);
+
+    EXPECT_TRUE(
+        app.commands.execCommand("/chatters", channel, false).isEmpty());
+    EXPECT_EQ(channel->getMessageSnapshot().back()->messageText,
+              QStringLiteral("Chatter count: 2."));
+
+    EXPECT_TRUE(app.commands.execCommand("/mods", channel, false).isEmpty());
+    EXPECT_EQ(channel->getMessageSnapshot().back()->messageText,
+              QStringLiteral("The moderators of this channel are: mod-user"));
+
+    EXPECT_TRUE(app.commands.execCommand("/vips", channel, false).isEmpty());
+    EXPECT_EQ(channel->getMessageSnapshot().back()->messageText,
+              QStringLiteral("The VIPs of this channel are: vip-user"));
+
+    EXPECT_TRUE(app.commands.execCommand("/uptime", channel, false).isEmpty());
+    EXPECT_EQ(channel->getMessageSnapshot().back()->messageText,
+              QStringLiteral("Channel is not live."));
+
+    EXPECT_TRUE(app.commands.execCommand("/clear", channel, false).isEmpty());
+    EXPECT_TRUE(channel->getMessageSnapshot().empty());
 }
 
 TEST(Commands, parseBanActions)

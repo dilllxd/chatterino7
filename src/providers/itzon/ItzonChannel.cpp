@@ -257,15 +257,28 @@ const QHash<QString, ItzonChannel::ChatUser> &ItzonChannel::chatUsers() const
 
 void ItzonChannel::setChatUser(const QString &name, ChatUser user)
 {
-    if (!name.isEmpty())
+    if (name.isEmpty())
     {
-        this->chatUsers_.insert(name.toLower(), std::move(user));
+        return;
     }
+
+    const auto key = name.toLower();
+    const auto existing = this->chatUsers_.constFind(key);
+    if (existing != this->chatUsers_.cend() && *existing == user)
+    {
+        return;
+    }
+    this->chatUsers_.insert(key, std::move(user));
+    this->chatUserChanged.invoke(key);
 }
 
 void ItzonChannel::removeChatUser(const QString &name)
 {
-    this->chatUsers_.remove(name.toLower());
+    const auto key = name.toLower();
+    if (this->chatUsers_.remove(key))
+    {
+        this->chatUserChanged.invoke(key);
+    }
 }
 
 void ItzonChannel::retainChatUsers(const std::unordered_set<QString> &names)
@@ -276,22 +289,92 @@ void ItzonChannel::retainChatUsers(const std::unordered_set<QString> &names)
     {
         normalizedNames.insert(name.toLower());
     }
+    bool changed = false;
     for (auto it = this->chatUsers_.begin(); it != this->chatUsers_.end();)
     {
         if (!normalizedNames.contains(it.key()))
         {
             it = this->chatUsers_.erase(it);
+            changed = true;
         }
         else
         {
             ++it;
         }
     }
+    if (changed)
+    {
+        this->chatUserChanged.invoke(QString{});
+    }
 }
 
 void ItzonChannel::clearChatUsers()
 {
+    if (this->chatUsers_.isEmpty())
+    {
+        return;
+    }
     this->chatUsers_.clear();
+    this->chatUserChanged.invoke(QString{});
+}
+
+const ItzonChannel::PinnedMessage *ItzonChannel::getPinnedMessage() const
+{
+    return this->pinnedMessages_.isEmpty() ? nullptr
+                                           : &this->pinnedMessages_.back();
+}
+
+qsizetype ItzonChannel::pinnedMessageCount() const
+{
+    return this->pinnedMessages_.size();
+}
+
+void ItzonChannel::setPinnedMessage(PinnedMessage pin)
+{
+    for (auto it = this->pinnedMessages_.begin();
+         it != this->pinnedMessages_.end(); ++it)
+    {
+        if (it->messageID == pin.messageID)
+        {
+            this->pinnedMessages_.erase(it);
+            break;
+        }
+    }
+    this->pinnedMessages_.append(std::move(pin));
+    this->pinnedMessageChanged.invoke();
+}
+
+void ItzonChannel::removePinnedMessage(const QString &messageID)
+{
+    for (auto it = this->pinnedMessages_.begin();
+         it != this->pinnedMessages_.end(); ++it)
+    {
+        if (it->messageID == messageID)
+        {
+            this->pinnedMessages_.erase(it);
+            this->pinnedMessageChanged.invoke();
+            return;
+        }
+    }
+}
+
+void ItzonChannel::clearPinnedMessages()
+{
+    if (this->pinnedMessages_.isEmpty())
+    {
+        return;
+    }
+    this->pinnedMessages_.clear();
+    this->pinnedMessageChanged.invoke();
+}
+
+void ItzonChannel::unpinCurrentMessage()
+{
+    const auto *pin = this->getPinnedMessage();
+    if (pin)
+    {
+        this->sendMessage(QStringLiteral(".unpin ") + pin->messageID);
+    }
 }
 
 void ItzonChannel::markSeventvEmotesReady()
@@ -668,14 +751,16 @@ void ItzonChannel::updateStreamInfo(const QString &title,
         return;
     }
 
-    const auto normalizedLanguage = language.trimmed().isEmpty()
-                                        ? QStringLiteral("und")
-                                        : language.trimmed();
+    const auto normalizedLanguage = language.trimmed();
+    const auto languageValue =
+        normalizedLanguage.isEmpty() || normalizedLanguage == u"und"
+            ? QJsonValue(QJsonValue::Null)
+            : QJsonValue(normalizedLanguage);
     QJsonObject payload{
         {QStringLiteral("title"), title},
         {QStringLiteral("categoryId"),
          categoryID ? QJsonValue(*categoryID) : QJsonValue(QJsonValue::Null)},
-        {QStringLiteral("language"), normalizedLanguage},
+        {QStringLiteral("language"), languageValue},
     };
     auto weak = this->weakFromThis();
     NetworkRequest(
@@ -781,9 +866,7 @@ void ItzonChannel::setStreamCategory(const QString &category)
 void ItzonChannel::setStreamLanguage(const QString &language)
 {
     this->updateStreamInfo(this->streamData_.title,
-                           this->streamData_.categoryID,
-                           language.trimmed().isEmpty() ? QStringLiteral("und")
-                                                        : language.trimmed());
+                           this->streamData_.categoryID, language.trimmed());
 }
 
 }  // namespace chatterino

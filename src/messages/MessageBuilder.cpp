@@ -2409,6 +2409,9 @@ void MessageBuilder::appendUsername(Communi::TagsRef tags,
     }
 
     QString usernameText = stylizeUsername(username, this->message());
+    const auto profileName = this->message().displayName.isEmpty()
+                                 ? this->message().loginName
+                                 : this->message().displayName;
 
     if (args.isSentWhisper)
     {
@@ -2422,7 +2425,7 @@ void MessageBuilder::appendUsername(Communi::TagsRef tags,
         this->emplace<TextElement>(usernameText, MessageElementFlag::Username,
                                    this->usernameColor_,
                                    FontStyle::ChatMediumBold)
-            ->setLink({Link::UserWhisper, this->message().displayName});
+            ->setLink({Link::UserWhisper, profileName});
 
         auto currentUser = app->getAccounts()->twitch.getCurrent();
 
@@ -2449,7 +2452,7 @@ void MessageBuilder::appendUsername(Communi::TagsRef tags,
         this->emplace<TextElement>(usernameText, MessageElementFlag::Username,
                                    this->usernameColor_,
                                    FontStyle::ChatMediumBold)
-            ->setLink({Link::UserInfo, this->message().displayName});
+            ->setLink({Link::UserInfo, profileName});
     }
 }
 

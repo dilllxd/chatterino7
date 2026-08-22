@@ -12,6 +12,7 @@
 #include "controllers/commands/CommandContext.hpp"
 #include "messages/MessageBuilder.hpp"
 #include "messages/MessageElement.hpp"
+#include "providers/itzon/ItzonChannel.hpp"
 #include "providers/twitch/api/Helix.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
@@ -67,6 +68,15 @@ QString chatters(const CommandContext &ctx)
 {
     if (ctx.channel == nullptr)
     {
+        return "";
+    }
+
+    if (const auto *itzonChannel =
+            dynamic_cast<ItzonChannel *>(ctx.channel.get()))
+    {
+        ctx.channel->addSystemMessage(
+            QStringLiteral("Chatter count: %1.")
+                .arg(localizeNumbers(itzonChannel->chatUsers().size())));
         return "";
     }
 

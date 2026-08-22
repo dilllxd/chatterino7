@@ -33,6 +33,7 @@ public:
 
     void initialize();
     std::shared_ptr<Channel> getOrCreate(const QString &name);
+    std::shared_ptr<Channel> findChannel(const QString &name) const;
     const std::shared_ptr<Channel> &getWhispersChannel() const;
     bool canSend() const;
     void reconnectCurrent();
@@ -43,6 +44,8 @@ public:
 private:
     struct Client {
         std::shared_ptr<ItzonAccount> account;
+        QString configuredUsername;
+        QString assignedUsername;
         std::unique_ptr<IrcConnection> connection;
         std::unique_ptr<RatelimitBucket> outgoing;
         bool authenticated = false;
@@ -53,8 +56,15 @@ private:
         QSet<QString> pendingPartChannels;
         QSet<QString> waitingForEmotesChannels;
         QHash<QString, std::unordered_set<QString>> pendingNames;
+
+        QString username() const
+        {
+            return this->assignedUsername.isEmpty() ? this->configuredUsername
+                                                    : this->assignedUsername;
+        }
     };
 
+    void addGuestClient();
     void addClient(const std::shared_ptr<ItzonAccount> &account);
     void removeClient(const QString &username);
     void configureClient(const std::shared_ptr<Client> &client);

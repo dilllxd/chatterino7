@@ -209,6 +209,11 @@ const QString &ItzonAccount::token() const
     return this->token_;
 }
 
+const QString &ItzonAccount::userID() const
+{
+    return this->userID_;
+}
+
 const QString &ItzonAccount::avatar() const
 {
     return this->avatar_;

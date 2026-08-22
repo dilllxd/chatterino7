@@ -6,6 +6,7 @@
 
 #include "Application.hpp"
 #include "controllers/accounts/AccountController.hpp"
+#include "providers/itzon/ItzonChannel.hpp"
 #include "providers/twitch/api/Helix.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
@@ -200,6 +201,7 @@ void PinnedMessageWidget::setChannel(TwitchChannel *channel)
 {
     this->signalHolder_.clear();
     this->channel_ = channel;
+    this->itzonChannel_ = nullptr;
     this->autoHideTimer_->stop();
 
     if (channel)
@@ -216,6 +218,36 @@ void PinnedMessageWidget::setChannel(TwitchChannel *channel)
     this->refresh();
 }
 
+void PinnedMessageWidget::setChannel(ItzonChannel *channel)
+{
+    this->signalHolder_.clear();
+    this->channel_ = nullptr;
+    this->itzonChannel_ = channel;
+    this->autoHideTimer_->stop();
+
+    if (channel)
+    {
+        this->signalHolder_.managedConnect(channel->pinnedMessageChanged,
+                                           [this] {
+                                               this->refresh();
+                                           });
+        this->signalHolder_.managedConnect(channel->userStateChanged, [this] {
+            this->refresh();
+        });
+    }
+
+    this->refresh();
+}
+
+void PinnedMessageWidget::detachChannel()
+{
+    this->signalHolder_.clear();
+    this->channel_ = nullptr;
+    this->itzonChannel_ = nullptr;
+    this->autoHideTimer_->stop();
+    this->refresh();
+}
+
 std::unique_ptr<QMenu> PinnedMessageWidget::buildModMenu()
 {
     auto menu = std::make_unique<QMenu>(this);
@@ -225,9 +257,17 @@ std::unique_ptr<QMenu> PinnedMessageWidget::buildModMenu()
         {
             this->channel_->unpinCurrentMessage();
         }
+        else if (this->itzonChannel_)
+        {
+            this->itzonChannel_->unpinCurrentMessage();
+        }
     });
 
     auto *unpinAfterMenu = menu->addMenu(u"Unpin After"_s);
+    QObject::connect(menu.get(), &QMenu::aboutToShow, this,
+                     [this, unpinAfterMenu] {
+                         unpinAfterMenu->setEnabled(this->channel_ != nullptr);
+                     });
 
     const auto addDuration = [&](const QString &label,
                                  std::optional<std::chrono::seconds> duration) {
@@ -270,7 +310,7 @@ std::unique_ptr<QMenu> PinnedMessageWidget::buildModMenu()
 
 void PinnedMessageWidget::refresh()
 {
-    if (!this->channel_)
+    if (!this->channel_ && !this->itzonChannel_)
     {
         this->progressTimer_->stop();
         this->autoHideTimer_->stop();
@@ -278,8 +318,11 @@ void PinnedMessageWidget::refresh()
         return;
     }
 
-    const auto *pin = this->channel_->getPinnedMessage();
-    if (!pin)
+    const auto *twitchPin =
+        this->channel_ ? this->channel_->getPinnedMessage() : nullptr;
+    const auto *itzonPin =
+        this->itzonChannel_ ? this->itzonChannel_->getPinnedMessage() : nullptr;
+    if (!twitchPin && !itzonPin)
     {
         this->progressTimer_->stop();
         this->autoHideTimer_->stop();
@@ -288,31 +331,54 @@ void PinnedMessageWidget::refresh()
         return;
     }
 
-    const auto mode = static_cast<UsernameDisplayMode>(
-        getSettings()->usernameDisplayMode.getValue());
-    this->pinnedByLabel_->setText(u"Pinned by <b>%1</b>"_s.arg(
-        pin->pinnedBy.formatted(mode).toHtmlEscaped()));
-
-    this->messageLabel_->setText(pin->messageText);
-    this->updateMessageHeight();
-
+    if (twitchPin)
     {
-        const QString sentAt = pin->startsAt.toLocalTime().toString(
+        const auto mode = static_cast<UsernameDisplayMode>(
+            getSettings()->usernameDisplayMode.getValue());
+        this->pinnedByLabel_->setText(u"Pinned by <b>%1</b>"_s.arg(
+            twitchPin->pinnedBy.formatted(mode).toHtmlEscaped()));
+        this->messageLabel_->setText(twitchPin->messageText);
+        const QString sentAt = twitchPin->startsAt.toLocalTime().toString(
             getSettings()->timestampFormat);
         this->footerLabel_->setText(u"Sent by %1 \u00B7 %2"_s.arg(
-            pin->sender.formatted(mode).toHtmlEscaped(), sentAt));
+            twitchPin->sender.formatted(mode).toHtmlEscaped(), sentAt));
     }
+    else
+    {
+        auto header = itzonPin->pinnedBy.isEmpty()
+                          ? u"Pinned message"_s
+                          : u"Pinned by <b>%1</b>"_s.arg(
+                                itzonPin->pinnedBy.toHtmlEscaped());
+        if (this->itzonChannel_->pinnedMessageCount() > 1)
+        {
+            header += u" · %1 pinned"_s.arg(
+                this->itzonChannel_->pinnedMessageCount());
+        }
+        this->pinnedByLabel_->setText(header);
+        this->messageLabel_->setText(itzonPin->messageText);
+        auto footer = u"Sent by %1"_s.arg(itzonPin->sender.toHtmlEscaped());
+        if (itzonPin->sentAt.isValid())
+        {
+            footer +=
+                u" \u00B7 %1"_s.arg(itzonPin->sentAt.toLocalTime().toString(
+                    getSettings()->timestampFormat));
+        }
+        this->footerLabel_->setText(footer);
+    }
+    this->updateMessageHeight();
 
     this->progressTimer_->stop();
     this->countdownLabel_->hide();
-    if (pin->endsAt.has_value() && pin->endsAt->isValid())
+    if (twitchPin && twitchPin->endsAt.has_value() &&
+        twitchPin->endsAt->isValid())
     {
-        this->pinEndsAt_ = *pin->endsAt;
+        this->pinEndsAt_ = *twitchPin->endsAt;
         this->tickProgress();  // set initial text immediately
         this->progressTimer_->start();
     }
 
-    const bool isMod = this->channel_->hasModRights();
+    const bool isMod = this->channel_ ? this->channel_->hasModRights()
+                                      : this->itzonChannel_->hasModRights();
     this->menuButton_->setVisible(isMod);
 
     if (this->userToggled_.value_or(true))

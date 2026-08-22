@@ -4,8 +4,10 @@
 #include "messages/Image.hpp"
 #include "providers/itzon/ItzonBadges.hpp"
 #include "providers/itzon/ItzonChannel.hpp"
+#include "providers/itzon/ItzonFollowers.hpp"
 
 #include <gtest/gtest.h>
+#include <QJsonArray>
 
 #include <array>
 
@@ -59,6 +61,55 @@ TEST(ItzonChatIdentity, RetainsAndRemovesMemberMetadataCaseInsensitively)
 
     channel.removeChatUser(QStringLiteral("SOMEUSER"));
     EXPECT_FALSE(channel.chatUser(QStringLiteral("someuser")));
+}
+
+TEST(ItzonChatIdentity, TracksMemberMetadataChanges)
+{
+    ItzonChannel channel(QStringLiteral("alice"));
+    int updates = 0;
+    QStringList changedUsers;
+    auto connection = channel.chatUserChanged.connect(
+        [&updates, &changedUsers](const QString &name) {
+            updates++;
+            changedUsers.append(name);
+        });
+
+    ItzonChannel::ChatUser user;
+    channel.setChatUser(QStringLiteral("SomeUser"), user);
+    channel.setChatUser(QStringLiteral("someuser"), user);
+    user.userID = QStringLiteral("1017");
+    channel.setChatUser(QStringLiteral("SOMEUSER"), user);
+
+    EXPECT_EQ(updates, 2);
+    EXPECT_EQ(changedUsers, QStringList({QStringLiteral("someuser"),
+                                         QStringLiteral("someuser")}));
+}
+
+TEST(ItzonChatIdentity, TracksMultiplePinnedMessages)
+{
+    ItzonChannel channel(QStringLiteral("alice"));
+    channel.setPinnedMessage({
+        .messageID = QStringLiteral("first"),
+        .sender = QStringLiteral("bob"),
+        .messageText = QStringLiteral("hello"),
+    });
+    channel.setPinnedMessage({
+        .messageID = QStringLiteral("second"),
+        .sender = QStringLiteral("carol"),
+        .messageText = QStringLiteral("world"),
+    });
+
+    ASSERT_EQ(channel.pinnedMessageCount(), 2);
+    ASSERT_NE(channel.getPinnedMessage(), nullptr);
+    EXPECT_EQ(channel.getPinnedMessage()->messageID, QStringLiteral("second"));
+
+    channel.removePinnedMessage(QStringLiteral("second"));
+    ASSERT_NE(channel.getPinnedMessage(), nullptr);
+    EXPECT_EQ(channel.getPinnedMessage()->messageID, QStringLiteral("first"));
+
+    channel.clearPinnedMessages();
+    EXPECT_EQ(channel.pinnedMessageCount(), 0);
+    EXPECT_EQ(channel.getPinnedMessage(), nullptr);
 }
 
 TEST(ItzonChatIdentity, SanitizesSubscriberBadgeNames)
@@ -119,4 +170,36 @@ TEST(ItzonChatIdentity, UsesOfficialCosmeticBadgeNames)
                       QString::fromUtf8(assetName).replace('_', '-') +
                       QStringLiteral(".svg"));
     }
+}
+
+TEST(ItzonChatIdentity, ParsesFollowerPages)
+{
+    const auto page = itzon::parseFollowerPage(QJsonObject{
+        {QStringLiteral("total"), 2},
+        {QStringLiteral("followers"),
+         QJsonArray{
+             QJsonObject{{QStringLiteral("username"), QStringLiteral("newest")},
+                         {QStringLiteral("followedAt"),
+                          QStringLiteral("2026-08-05T18:24:11Z")}},
+             QJsonObject{{QStringLiteral("username"), QStringLiteral("older")},
+                         {QStringLiteral("followedAt"),
+                          QStringLiteral("2026-08-04T09:02:58Z")}},
+         }},
+        {QStringLiteral("nextCursor"), QStringLiteral("opaque-cursor")},
+    });
+
+    ASSERT_TRUE(page);
+    EXPECT_EQ(page->total, 2);
+    ASSERT_EQ(page->followers.size(), 2);
+    EXPECT_EQ(page->followers[0].username, QStringLiteral("newest"));
+    EXPECT_EQ(page->followers[1].username, QStringLiteral("older"));
+    EXPECT_EQ(page->nextCursor, QStringLiteral("opaque-cursor"));
+
+    EXPECT_FALSE(itzon::parseFollowerPage(QJsonObject{
+        {QStringLiteral("total"), 1},
+        {QStringLiteral("followers"),
+         QJsonArray{QJsonObject{
+             {QStringLiteral("username"), QStringLiteral("broken")},
+             {QStringLiteral("followedAt"), QStringLiteral("not-a-date")}}}},
+    }));
 }

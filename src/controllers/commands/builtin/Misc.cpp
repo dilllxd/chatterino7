@@ -9,6 +9,8 @@
 #include "controllers/accounts/AccountController.hpp"
 #include "controllers/commands/CommandContext.hpp"
 #include "controllers/userdata/UserDataController.hpp"
+#include "providers/itzon/ItzonChannel.hpp"
+#include "providers/itzon/ItzonChatServer.hpp"
 #include "providers/kick/KickChannel.hpp"
 #include "providers/kick/KickChatServer.hpp"
 #include "providers/twitch/api/Helix.hpp"
@@ -71,6 +73,17 @@ QString uptime(const CommandContext &ctx)
         return "";
     }
 
+    if (const auto *itzonChannel =
+            dynamic_cast<ItzonChannel *>(ctx.channel.get()))
+    {
+        const auto &stream = itzonChannel->streamData();
+        ctx.channel->addSystemMessage(
+            stream.live ? (stream.uptime.isEmpty() ? QStringLiteral("Live")
+                                                   : stream.uptime)
+                        : QStringLiteral("Channel is not live."));
+        return "";
+    }
+
     if (ctx.twitchChannel == nullptr)
     {
         ctx.channel->addSystemMessage(
@@ -100,6 +113,11 @@ QString user(const CommandContext &ctx)
         ctx.channel->addSystemMessage("Usage: /user <user> [channel]");
         return "";
     }
+    if (ctx.channel->isItzonChannel())
+    {
+        return openUsercard(ctx);
+    }
+
     QString userName = ctx.words[1];
     stripUserName(userName);
 
@@ -713,6 +731,10 @@ QString openUsercard(const CommandContext &ctx)
         stripChannelName(channelName);
 
         auto channelTemp = [&]() -> ChannelPtr {
+            if (channel->isItzonChannel())
+            {
+                return getApp()->getItzonChatServer()->findChannel(channelName);
+            }
             if (channel->isKickChannel())
             {
                 return getApp()->getKickChatServer()->findBySlug(channelName);

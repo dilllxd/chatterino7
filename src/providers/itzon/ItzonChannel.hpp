@@ -7,7 +7,9 @@
 #include "common/ChannelChatters.hpp"
 
 #include <pajlada/signals/signal.hpp>
+#include <QDateTime>
 #include <QHash>
+#include <QList>
 #include <QTimer>
 
 #include <optional>
@@ -59,12 +61,24 @@ public:
         bool operator==(const StreamData &other) const = default;
     };
 
+    struct PinnedMessage {
+        QString messageID;
+        QString sender;
+        QString pinnedBy;
+        QString messageText;
+        QDateTime sentAt;
+
+        bool operator==(const PinnedMessage &other) const = default;
+    };
+
     explicit ItzonChannel(const QString &name);
 
     pajlada::Signals::NoArgSignal joined;
     pajlada::Signals::NoArgSignal streamDataChanged;
     pajlada::Signals::NoArgSignal liveStatusChanged;
     pajlada::Signals::NoArgSignal userStateChanged;
+    pajlada::Signals::Signal<const QString &> chatUserChanged;
+    pajlada::Signals::NoArgSignal pinnedMessageChanged;
 
     void initialize();
     void reloadSeventvEmotes(bool manualRefresh);
@@ -82,6 +96,12 @@ public:
     void removeChatUser(const QString &name);
     void retainChatUsers(const std::unordered_set<QString> &names);
     void clearChatUsers();
+    const PinnedMessage *getPinnedMessage() const;
+    qsizetype pinnedMessageCount() const;
+    void setPinnedMessage(PinnedMessage pin);
+    void removePinnedMessage(const QString &messageID);
+    void clearPinnedMessages();
+    void unpinCurrentMessage();
     std::pair<std::shared_ptr<MessageThread>, MessagePtr> getOrCreateThread(
         const QString &messageID);
 
@@ -119,6 +139,7 @@ private:
     QTimer seventvRefreshTimer_;
     bool seventvEmotesReady_ = false;
     QHash<QString, ChatUser> chatUsers_;
+    QList<PinnedMessage> pinnedMessages_;
     std::unordered_map<QString, std::weak_ptr<MessageThread>> threads_;
     bool isMod_ = false;
     bool isVip_ = false;

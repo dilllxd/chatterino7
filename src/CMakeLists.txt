@@ -478,6 +478,8 @@ set(SOURCE_FILES
         providers/itzon/ItzonOAuth.hpp
         providers/itzon/ItzonChannel.cpp
         providers/itzon/ItzonChannel.hpp
+        providers/itzon/ItzonFollowers.cpp
+        providers/itzon/ItzonFollowers.hpp
         providers/itzon/ItzonChatServer.cpp
         providers/itzon/ItzonChatServer.hpp
         providers/itzon/ItzonWebSocketProtocol.cpp
@@ -740,6 +742,8 @@ set(SOURCE_FILES
         widgets/BaseWindow.hpp
         widgets/ChatterListWidget.cpp
         widgets/ChatterListWidget.hpp
+        widgets/ItzonFollowerListWidget.cpp
+        widgets/ItzonFollowerListWidget.hpp
         widgets/DraggablePopup.cpp
         widgets/DraggablePopup.hpp
         widgets/FramelessEmbedWindow.cpp
@@ -1176,7 +1180,9 @@ if (BUILD_APP)
             # windeployqt expects to find openssl in '/bin' but we deploy it in '/'.
             list(APPEND WINDEPLOYQT_COMMAND_ARGV --force-openssl)
         endif()
-        string(REPLACE ";" " " WINDEPLOYQT_COMMAND "${WINDEPLOYQT_COMMAND_ARGV}")
+        string(JOIN "\" \"" WINDEPLOYQT_COMMAND ${WINDEPLOYQT_COMMAND_ARGV})
+        string(PREPEND WINDEPLOYQT_COMMAND "\"")
+        string(APPEND WINDEPLOYQT_COMMAND "\"")
 
         install(TARGETS ${EXECUTABLE_PROJECT}
             RUNTIME_DEPENDENCIES
@@ -1201,7 +1207,7 @@ if (BUILD_APP)
 
         install(
             CODE
-                "message(\"-- Running: ${WINDEPLOYQT_COMMAND} --dir \\\"\${CMAKE_INSTALL_PREFIX}\\\"\")"
+                "message(\"-- Running windeployqt --dir \\\"\${CMAKE_INSTALL_PREFIX}\\\"\")"
             COMPONENT ${PROJECT_NAME}
         )
         install(

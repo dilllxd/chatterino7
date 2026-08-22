@@ -16,6 +16,23 @@ namespace {
 
 constexpr auto WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
+QString closeDescription(quint16 code)
+{
+    switch (code)
+    {
+        case 4400:
+            return QStringLiteral("flood limit exceeded");
+        case 4401:
+            return QStringLiteral("ping timeout");
+        case 4402:
+            return QStringLiteral("server queue overflow");
+        case 4403:
+            return QStringLiteral("authentication revoked");
+        default:
+            return QStringLiteral("connection closed");
+    }
+}
+
 quint64 readBigEndian(const QByteArray &data, qsizetype offset,
                       qsizetype length)
 {
@@ -240,6 +257,29 @@ void ItzonWebSocketProtocol::processFrames()
 
         if (opcode == 0x8)
         {
+            if (payload.size() >= 2)
+            {
+                const auto code =
+                    static_cast<quint16>(readBigEndian(payload, 0, 2));
+                auto reason = QString::fromUtf8(payload.mid(2))
+                                  .replace('\r', ' ')
+                                  .replace('\n', ' ')
+                                  .trimmed();
+                auto detail =
+                    QStringLiteral("itzon.tv closed WebSocket (%1: %2)")
+                        .arg(code)
+                        .arg(closeDescription(code));
+                if (!reason.isEmpty())
+                {
+                    detail += QStringLiteral(" - ") + reason;
+                }
+                if (auto *message = Communi::IrcMessage::fromData(
+                        QStringLiteral("ERROR :").append(detail).toUtf8(),
+                        this->connection()))
+                {
+                    this->receiveMessage(message);
+                }
+            }
             this->sendFrame(0x8, payload);
             this->socket()->disconnectFromHost();
             return;

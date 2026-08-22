@@ -16,7 +16,8 @@ chat bot tokens as a fallback.
 3. Change a split's channel, choose **itzon.tv**, and enter the channel's
    account name.
 4. Use the account switcher to choose which saved itzon.tv account joins the
-   open channels and sends the next messages.
+   open channels and sends the next messages. Choose **anonymous** to join as a
+   read-only guest without saving a credential.
 
 ## OAuth public-client setup
 
@@ -48,7 +49,8 @@ immediately because the successful refresh revokes the previous access token.
 The split menu and its `Open channel in browser` hotkey open the matching
 `https://itzon.tv/{channel}` page. itzon splits also expose the provider-neutral
 Twitch conveniences that apply to them: reload channel emotes, mute highlight
-sounds, live notifications, replies, and moderation mode.
+sounds, live notifications, replies, moderation mode, usercards, pinned-message
+banners, and a paginated follower list.
 
 ## Chat commands
 
@@ -66,6 +68,10 @@ the same-named Twitch or Kick API command:
 The commands also work with a `.` prefix, matching the itzon.tv web client.
 Replies use the message hover action and the IRC `+reply` tag; received replies
 are grouped into Chatterino reply threads.
+
+The local `/uptime`, `/chatters`, `/mods`, `/vips`, `/user`, `/usercard`, and
+`/clear` conveniences also work in itzon.tv splits. `/clear` only clears the
+local view; it does not delete server history.
 
 ## Rich live notifications
 
@@ -88,6 +94,9 @@ Open itzon.tv splits also combine that authenticated metadata with the public
 live-channel response. Their headers and hover cards show live state, title,
 category, viewers, followers, language, uptime, and the current stream preview.
 Saved live tabs are marked live as soon as the startup layout is restored.
+The follower-list window uses `/me/followers` for the signed-in channel owner
+and the public channel follower endpoint otherwise. Private follower lists are
+reported as unavailable instead of being treated as empty.
 
 Saved accounts stay authenticated for fast switching, but only the selected
 itzon.tv account joins the open channels and receives or sends their chat.
@@ -112,6 +121,13 @@ deduplicating any messages that overlap during the handoff by `msgid`.
   IRC member list also populates Chatterino's recent-chatter data. Expected
   account-switch handoff parts are suppressed to avoid misleading status
   messages.
+- Anonymous mode omits `PASS`, accepts the random nickname assigned by itzon.tv,
+  joins channels normally, and keeps the composer read-only. The connection is
+  resynchronized after IRC registration so startup tabs receive replay, pins,
+  badges, avatars, and new messages.
+- Documented WebSocket close codes are surfaced with their reason. A `4403`
+  authentication-revoked close stops automatic reconnects until the credential
+  is replaced or OAuth signs in again.
 - Outgoing chat is queued at a conservative rate below the documented
   approximately two-messages-per-second non-moderator limit. Lines are trimmed
   to the IRC byte limit without splitting Unicode surrogate pairs.
@@ -131,3 +147,14 @@ deduplicating any messages that overlap during the handoff by `msgid`.
 The upstream [Chatterino7 project](https://github.com/SevenTV/chatterino7) and
 this fork are MIT-licensed. The itzon.tv protocol behavior follows its
 [chat-bot documentation](https://itzon.tv/docs/chat-bots).
+
+## Platform limits
+
+The client implements the documented itzon.tv chat, public API, and OAuth
+features. Twitch-only products have no itzon.tv protocol equivalent and are not
+emulated: clips, raids, bits, channel points, subscriptions, polls,
+predictions, commercials, AutoMod queues, room modes, follow/unfollow actions,
+and Twitch Mod View. Timed pin expiry, account creation dates, and per-user
+follow age also require server fields that itzon.tv does not currently expose.
+Live notifications poll the public API because itzon.tv does not document a
+push event stream.

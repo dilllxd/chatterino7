@@ -51,6 +51,12 @@ QString deleteAllMessages(const CommandContext &ctx)
         return "";
     }
 
+    if (ctx.channel->isItzonChannel())
+    {
+        ctx.channel->clearMessages();
+        return "";
+    }
+
     if (ctx.twitchChannel == nullptr)
     {
         ctx.channel->addSystemMessage(

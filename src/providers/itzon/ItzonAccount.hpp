@@ -46,6 +46,7 @@ public:
     QString toString() const override;
     const QString &username() const;
     const QString &token() const;
+    const QString &userID() const;
     const QString &avatar() const;
     bool isOAuth() const;
     bool hasScope(const QString &scope) const;

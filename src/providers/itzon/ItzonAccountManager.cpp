@@ -43,11 +43,6 @@ void ItzonAccountManager::load()
         this->currentUserChanged.invoke();
     });
     this->currentUser_ = this->findUserByUsername(this->currentUsername);
-    if (!this->currentUser_ && !this->accounts.empty())
-    {
-        this->currentUser_ = this->accounts.raw().front();
-        this->currentUsername = this->currentUser_->username();
-    }
     this->refreshAccounts();
 }
 

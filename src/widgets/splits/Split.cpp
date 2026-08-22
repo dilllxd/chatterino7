@@ -12,6 +12,7 @@
 #include "controllers/commands/CommandController.hpp"
 #include "controllers/hotkeys/HotkeyController.hpp"
 #include "controllers/notifications/NotificationController.hpp"
+#include "providers/itzon/ItzonAccount.hpp"
 #include "providers/itzon/ItzonChannel.hpp"
 #include "providers/kick/KickAccount.hpp"
 #include "providers/kick/KickChannel.hpp"
@@ -35,6 +36,7 @@
 #include "widgets/helper/NotebookTab.hpp"
 #include "widgets/helper/ResizingTextEdit.hpp"
 #include "widgets/helper/SearchPopup.hpp"
+#include "widgets/ItzonFollowerListWidget.hpp"
 #include "widgets/Notebook.hpp"
 #include "widgets/OverlayWindow.hpp"
 #include "widgets/Scrollbar.hpp"
@@ -127,6 +129,10 @@ Split::Split(QWidget *parent)
     });
     this->signalHolder_.managedConnect(
         getApp()->getAccounts()->kick.currentUserChanged, [this] {
+            this->updateInputPlaceholder();
+        });
+    this->signalHolder_.managedConnect(
+        getApp()->getAccounts()->itzon.currentUserChanged, [this] {
             this->updateInputPlaceholder();
         });
     this->updateInputPlaceholder();
@@ -824,6 +830,15 @@ void Split::updateInputPlaceholder()
         return;
     }
 
+    if (this->getChannel()->isItzonChannel())
+    {
+        const auto user = getApp()->getAccounts()->itzon.current();
+        this->input_->ui_.textEdit->setPlaceholderText(
+            user ? QStringLiteral("Send message as %1...").arg(user->username())
+                 : QStringLiteral("Log in to send messages..."));
+        return;
+    }
+
     if (!this->getChannel()->isTwitchChannel())
     {
         return;
@@ -1018,6 +1033,7 @@ void Split::updateChannelConnections()
 
     auto *tc = dynamic_cast<TwitchChannel *>(channel);
     auto *kc = dynamic_cast<KickChannel *>(channel);
+    auto *ic = dynamic_cast<ItzonChannel *>(channel);
     if (tc)
     {
         this->usermodeChangedConnection_ = tc->userStateChanged.connect([this] {
@@ -1055,11 +1071,15 @@ void Split::updateChannelConnections()
             kc->sendWaitUpdate.connect([this](const QString &text) {
                 this->getInput().setSendWaitStatus(text);
             });
-        this->pinnedBanner_->setChannel(nullptr);
+        this->pinnedBanner_->detachChannel();
+    }
+    else if (ic != nullptr)
+    {
+        this->pinnedBanner_->setChannel(ic);
     }
     else
     {
-        this->pinnedBanner_->setChannel(nullptr);
+        this->pinnedBanner_->detachChannel();
     }
 }
 
@@ -1242,6 +1262,11 @@ void Split::changeChannel()
             {
                 w->close();
             }
+            for (const auto &w :
+                 this->findChildren<ItzonFollowerListWidget *>())
+            {
+                w->close();
+            }
         });
 }
 
@@ -1404,6 +1429,32 @@ void Split::openChatterList()
     chatterDock->resize(chatterListWidth, chatterListHeight);
     widgets::showAndMoveWindowTo(
         chatterDock, this->mapToGlobal(QPoint{0, this->header_->height()}),
+        widgets::BoundsChecking::CursorPosition);
+}
+
+void Split::openFollowerList()
+{
+    auto channel = this->getSelectedChannel();
+    auto *itzonChannel = dynamic_cast<ItzonChannel *>(channel.get());
+    if (!itzonChannel)
+    {
+        qCWarning(chatterinoWidget)
+            << "Follower list opened in an unsupported channel";
+        return;
+    }
+
+    auto *followerList = new ItzonFollowerListWidget(itzonChannel, this);
+    QObject::connect(followerList, &ItzonFollowerListWidget::userClicked,
+                     [this](const QString &userLogin) {
+                         this->view_->showUserInfoPopup(userLogin,
+                                                        MessagePlatform::Itzon);
+                     });
+
+    followerList->resize(
+        static_cast<int>(this->width() * 0.6),
+        this->height() - this->header_->height() - this->input_->height());
+    widgets::showAndMoveWindowTo(
+        followerList, this->mapToGlobal(QPoint{0, this->header_->height()}),
         widgets::BoundsChecking::CursorPosition);
 }
 
